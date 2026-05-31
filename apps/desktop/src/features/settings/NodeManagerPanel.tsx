@@ -30,7 +30,6 @@ export function NodeManagerPanel() {
   );
   const updateActiveProfile = useProfileStore((state) => state.updateActiveProfile);
   const [unlockPassword, setUnlockPassword] = useState("");
-  const [biscuitPublicKey, setBiscuitPublicKey] = useState("");
   const [rustLog, setRustLog] = useState("info");
   const [status, setStatus] = useState("No node action yet");
   const [details, setDetails] = useState("");
@@ -131,8 +130,8 @@ export function NodeManagerPanel() {
         <label>
           <span>Biscuit public key for generated config</span>
           <input
-            value={biscuitPublicKey}
-            onChange={(event) => setBiscuitPublicKey(event.target.value)}
+            value={activeProfile.biscuitPublicKey}
+            onChange={(event) => updateActiveProfile({ biscuitPublicKey: event.target.value })}
             placeholder="ed25519/..."
           />
         </label>
@@ -183,7 +182,7 @@ export function NodeManagerPanel() {
                     ckb_rpc_endpoint: activeProfile.ckbRpcEndpoint,
                     rpc_listening_addr: activeProfile.rpcListeningAddr,
                     p2p_listening_addr: activeProfile.p2pListeningAddr,
-                    biscuit_public_key: biscuitPublicKey || null,
+                    biscuit_public_key: activeProfile.biscuitPublicKey || null,
                   },
                 });
                 await invoke("node_write_config", {

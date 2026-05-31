@@ -5,6 +5,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use argon2::Argon2;
+use biscuit_auth::{Biscuit, KeyPair, PrivateKey, PublicKey};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -15,6 +16,7 @@ use std::{
     net::{IpAddr, TcpListener},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    str::FromStr,
     sync::Mutex,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -43,6 +45,30 @@ const ALLOWED_RPC_METHODS: &[&str] = &[
     "graph_nodes",
     "graph_channels",
 ];
+
+const BISCUIT_TEMPLATE_READ_ONLY: &[&str] = &[
+    r#"read("node");"#,
+    r#"read("peers");"#,
+    r#"read("channels");"#,
+    r#"read("payments");"#,
+    r#"read("invoices");"#,
+    r#"read("graph");"#,
+];
+
+const BISCUIT_TEMPLATE_OPERATOR: &[&str] = &[
+    r#"read("node");"#,
+    r#"read("peers");"#,
+    r#"write("peers");"#,
+    r#"read("channels");"#,
+    r#"write("channels");"#,
+    r#"read("payments");"#,
+    r#"write("payments");"#,
+    r#"read("invoices");"#,
+    r#"write("invoices");"#,
+    r#"read("graph");"#,
+];
+
+const BISCUIT_TEMPLATE_WATCHTOWER: &[&str] = &[r#"write("watchtower");"#];
 
 #[derive(Serialize)]
 struct SecretBackendStatus {
@@ -188,6 +214,55 @@ struct WalletCommandError {
     message: String,
 }
 
+#[derive(Serialize)]
+struct BiscuitKeypair {
+    public_key: String,
+    private_key: String,
+}
+
+#[derive(Serialize)]
+struct BiscuitTemplate {
+    id: &'static str,
+    label: &'static str,
+    source: String,
+}
+
+#[derive(Deserialize)]
+struct BiscuitTokenInput {
+    private_key: String,
+    template_id: String,
+    custom_source: Option<String>,
+    expiry_rfc3339: String,
+}
+
+#[derive(Deserialize)]
+struct BiscuitInspectInput {
+    token: String,
+    public_key: String,
+}
+
+#[derive(Serialize)]
+struct BiscuitTokenOutput {
+    public_key: String,
+    token: String,
+    source: String,
+    revocation_ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct BiscuitInspectReport {
+    public_key: String,
+    source: String,
+    block_count: usize,
+    revocation_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct BiscuitCommandError {
+    kind: &'static str,
+    message: String,
+}
+
 #[tauri::command]
 fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -329,7 +404,10 @@ fn node_write_config(input: WriteConfigInput) -> Result<(), NodeCommandError> {
 }
 
 #[tauri::command]
-fn node_start(input: NodeStartInput, state: State<'_, NodeManager>) -> Result<NodeStatus, NodeCommandError> {
+fn node_start(
+    input: NodeStartInput,
+    state: State<'_, NodeManager>,
+) -> Result<NodeStatus, NodeCommandError> {
     if input.secret_key_password.trim().is_empty() {
         return Err(NodeCommandError {
             kind: "missing_unlock_password",
@@ -358,7 +436,12 @@ fn node_start(input: NodeStartInput, state: State<'_, NodeManager>) -> Result<No
     })?;
 
     if let Some(existing) = processes.get_mut(&input.profile_id) {
-        if existing.child.try_wait().map_err(map_process_error)?.is_none() {
+        if existing
+            .child
+            .try_wait()
+            .map_err(map_process_error)?
+            .is_none()
+        {
             return Err(NodeCommandError {
                 kind: "already_running",
                 message: "FNN is already running for this profile".to_string(),
@@ -380,7 +463,10 @@ fn node_start(input: NodeStartInput, state: State<'_, NodeManager>) -> Result<No
         .arg("-d")
         .arg(&input.data_dir)
         .env("FIBER_SECRET_KEY_PASSWORD", input.secret_key_password)
-        .env("RUST_LOG", input.rust_log.unwrap_or_else(|| "info".to_string()))
+        .env(
+            "RUST_LOG",
+            input.rust_log.unwrap_or_else(|| "info".to_string()),
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
@@ -411,7 +497,10 @@ fn node_start(input: NodeStartInput, state: State<'_, NodeManager>) -> Result<No
 }
 
 #[tauri::command]
-fn node_stop(profile_id: String, state: State<'_, NodeManager>) -> Result<NodeStatus, NodeCommandError> {
+fn node_stop(
+    profile_id: String,
+    state: State<'_, NodeManager>,
+) -> Result<NodeStatus, NodeCommandError> {
     let mut processes = state.processes.lock().map_err(|_| NodeCommandError {
         kind: "node_state_lock_failed",
         message: "Node manager state lock is poisoned".to_string(),
@@ -427,7 +516,12 @@ fn node_stop(profile_id: String, state: State<'_, NodeManager>) -> Result<NodeSt
         });
     };
 
-    if managed.child.try_wait().map_err(map_process_error)?.is_none() {
+    if managed
+        .child
+        .try_wait()
+        .map_err(map_process_error)?
+        .is_none()
+    {
         managed.child.kill().map_err(|err| NodeCommandError {
             kind: "stop_failed",
             message: err.to_string(),
@@ -445,7 +539,10 @@ fn node_stop(profile_id: String, state: State<'_, NodeManager>) -> Result<NodeSt
 }
 
 #[tauri::command]
-fn node_status(profile_id: String, state: State<'_, NodeManager>) -> Result<NodeStatus, NodeCommandError> {
+fn node_status(
+    profile_id: String,
+    state: State<'_, NodeManager>,
+) -> Result<NodeStatus, NodeCommandError> {
     let mut processes = state.processes.lock().map_err(|_| NodeCommandError {
         kind: "node_state_lock_failed",
         message: "Node manager state lock is poisoned".to_string(),
@@ -462,7 +559,11 @@ fn node_status(profile_id: String, state: State<'_, NodeManager>) -> Result<Node
     };
 
     let pid = managed.child.id();
-    let exited = managed.child.try_wait().map_err(map_process_error)?.is_some();
+    let exited = managed
+        .child
+        .try_wait()
+        .map_err(map_process_error)?
+        .is_some();
 
     Ok(NodeStatus {
         profile_id,
@@ -574,7 +675,10 @@ fn wallet_validate_backup(input: WalletBackupInput) -> Result<bool, WalletComman
 }
 
 #[tauri::command]
-fn wallet_restore_encrypted_backup(input: WalletBackupInput, overwrite: bool) -> Result<WalletStatus, WalletCommandError> {
+fn wallet_restore_encrypted_backup(
+    input: WalletBackupInput,
+    overwrite: bool,
+) -> Result<WalletStatus, WalletCommandError> {
     require_passphrase(&input.passphrase)?;
     let key_path = wallet_key_path(&input.data_dir);
 
@@ -602,6 +706,113 @@ fn wallet_restore_encrypted_backup(input: WalletBackupInput, overwrite: bool) ->
     set_private_file_permissions(&key_path)?;
 
     Ok(wallet_status(input.data_dir))
+}
+
+#[tauri::command]
+fn biscuit_generate_keypair() -> BiscuitKeypair {
+    let keypair = KeyPair::new();
+
+    BiscuitKeypair {
+        public_key: keypair.public().to_string(),
+        private_key: keypair.private().to_prefixed_string(),
+    }
+}
+
+#[tauri::command]
+fn biscuit_import_private_key(private_key: String) -> Result<BiscuitKeypair, BiscuitCommandError> {
+    let private_key = parse_biscuit_private_key(&private_key)?;
+
+    Ok(BiscuitKeypair {
+        public_key: private_key.public().to_string(),
+        private_key: private_key.to_prefixed_string(),
+    })
+}
+
+#[tauri::command]
+fn biscuit_templates() -> Vec<BiscuitTemplate> {
+    vec![
+        BiscuitTemplate {
+            id: "read_only",
+            label: "Read-only dashboard",
+            source: biscuit_template_source("read_only", "").unwrap_or_default(),
+        },
+        BiscuitTemplate {
+            id: "operator",
+            label: "Operator",
+            source: biscuit_template_source("operator", "").unwrap_or_default(),
+        },
+        BiscuitTemplate {
+            id: "watchtower",
+            label: "Watchtower",
+            source: biscuit_template_source("watchtower", "").unwrap_or_default(),
+        },
+        BiscuitTemplate {
+            id: "custom",
+            label: "Custom",
+            source: "".to_string(),
+        },
+    ]
+}
+
+#[tauri::command]
+fn biscuit_generate_token(
+    input: BiscuitTokenInput,
+) -> Result<BiscuitTokenOutput, BiscuitCommandError> {
+    let private_key = parse_biscuit_private_key(&input.private_key)?;
+    let keypair = KeyPair::from(&private_key);
+    let source = build_biscuit_source(
+        &input.template_id,
+        input.custom_source.as_deref().unwrap_or_default(),
+        &input.expiry_rfc3339,
+    )?;
+    let token = Biscuit::builder()
+        .code(&source)
+        .map_err(|err| BiscuitCommandError {
+            kind: "token_source_invalid",
+            message: err.to_string(),
+        })?
+        .build(&keypair)
+        .map_err(|err| BiscuitCommandError {
+            kind: "token_build_failed",
+            message: err.to_string(),
+        })?;
+    let token_base64 = token.to_base64().map_err(|err| BiscuitCommandError {
+        kind: "token_serialize_failed",
+        message: err.to_string(),
+    })?;
+
+    Ok(BiscuitTokenOutput {
+        public_key: keypair.public().to_string(),
+        token: token_base64,
+        source,
+        revocation_ids: token_revocation_ids(&token),
+    })
+}
+
+#[tauri::command]
+fn biscuit_inspect_token(
+    input: BiscuitInspectInput,
+) -> Result<BiscuitInspectReport, BiscuitCommandError> {
+    let public_key = parse_biscuit_public_key(&input.public_key)?;
+    let token = Biscuit::from_base64(input.token.trim(), public_key).map_err(|err| {
+        BiscuitCommandError {
+            kind: "token_verify_failed",
+            message: err.to_string(),
+        }
+    })?;
+    let source = token
+        .print_block_source(0)
+        .map_err(|err| BiscuitCommandError {
+            kind: "token_inspect_failed",
+            message: err.to_string(),
+        })?;
+
+    Ok(BiscuitInspectReport {
+        public_key: public_key.to_string(),
+        source,
+        block_count: token.context().len(),
+        revocation_ids: token_revocation_ids(&token),
+    })
 }
 
 fn validate_endpoint(endpoint: &str) -> Result<Url, RpcClientError> {
@@ -677,11 +888,7 @@ fn is_private_ip(ip: IpAddr) -> bool {
                 || ip.is_unspecified()
                 || ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000) == 0b0100_0000
         }
-        IpAddr::V6(ip) => {
-            ip.is_unique_local()
-                || ip.is_unicast_link_local()
-                || ip.is_unspecified()
-        }
+        IpAddr::V6(ip) => ip.is_unique_local() || ip.is_unicast_link_local() || ip.is_unspecified(),
     }
 }
 
@@ -789,7 +996,8 @@ services:\n  - fiber\n  - rpc\n  - ckb\n",
 }
 
 fn parse_endpoint_host_port(endpoint: &str) -> Result<(String, u16), String> {
-    let parsed = Url::parse(endpoint).map_err(|err| format!("Could not parse RPC endpoint for port check: {err}"))?;
+    let parsed = Url::parse(endpoint)
+        .map_err(|err| format!("Could not parse RPC endpoint for port check: {err}"))?;
     let host = parsed
         .host_str()
         .ok_or_else(|| "RPC endpoint has no host for port check".to_string())?
@@ -847,7 +1055,9 @@ fn redact_log_text(input: &str) -> String {
     input
         .lines()
         .map(|line| {
-            if line.contains("FIBER_SECRET_KEY_PASSWORD") || line.to_lowercase().contains("authorization: bearer") {
+            if line.contains("FIBER_SECRET_KEY_PASSWORD")
+                || line.to_lowercase().contains("authorization: bearer")
+            {
                 "[REDACTED]".to_string()
             } else {
                 line.to_string()
@@ -862,7 +1072,9 @@ fn wallet_key_path(data_dir: &str) -> PathBuf {
 }
 
 fn wallet_backup_path(data_dir: &str) -> PathBuf {
-    Path::new(data_dir).join("ckb").join("fiber-wallet-key-backup.json")
+    Path::new(data_dir)
+        .join("ckb")
+        .join("fiber-wallet-key-backup.json")
 }
 
 fn extract_private_key_line(contents: &str) -> Result<String, WalletCommandError> {
@@ -897,7 +1109,10 @@ fn require_passphrase(passphrase: &str) -> Result<(), WalletCommandError> {
     Ok(())
 }
 
-fn encrypt_key_backup(plaintext: &[u8], passphrase: &str) -> Result<WalletBackupEnvelope, WalletCommandError> {
+fn encrypt_key_backup(
+    plaintext: &[u8],
+    passphrase: &str,
+) -> Result<WalletBackupEnvelope, WalletCommandError> {
     let mut salt = [0u8; 16];
     let mut nonce = [0u8; 12];
     getrandom::fill(&mut salt).map_err(|err| WalletCommandError {
@@ -931,7 +1146,10 @@ fn encrypt_key_backup(plaintext: &[u8], passphrase: &str) -> Result<WalletBackup
     })
 }
 
-fn decrypt_key_backup(envelope: &WalletBackupEnvelope, passphrase: &str) -> Result<Vec<u8>, WalletCommandError> {
+fn decrypt_key_backup(
+    envelope: &WalletBackupEnvelope,
+    passphrase: &str,
+) -> Result<Vec<u8>, WalletCommandError> {
     if envelope.version != 1 || envelope.kdf != "argon2id" || envelope.cipher != "aes-256-gcm" {
         return Err(WalletCommandError {
             kind: "unsupported_backup",
@@ -981,7 +1199,10 @@ fn read_backup_envelope(data_dir: &str) -> Result<WalletBackupEnvelope, WalletCo
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect::<String>()
+    bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 fn hex_decode(input: &str) -> Result<Vec<u8>, WalletCommandError> {
@@ -1000,6 +1221,110 @@ fn hex_decode(input: &str) -> Result<Vec<u8>, WalletCommandError> {
                 message: err.to_string(),
             })
         })
+        .collect()
+}
+
+fn parse_biscuit_private_key(input: &str) -> Result<PrivateKey, BiscuitCommandError> {
+    let value = input.trim();
+    if value.is_empty() {
+        return Err(BiscuitCommandError {
+            kind: "missing_private_key",
+            message: "Biscuit private key is required".to_string(),
+        });
+    }
+
+    PrivateKey::from_str(value).map_err(|err| BiscuitCommandError {
+        kind: "invalid_private_key",
+        message: err.to_string(),
+    })
+}
+
+fn parse_biscuit_public_key(input: &str) -> Result<PublicKey, BiscuitCommandError> {
+    let value = input.trim();
+    if value.is_empty() {
+        return Err(BiscuitCommandError {
+            kind: "missing_public_key",
+            message: "Biscuit public key is required".to_string(),
+        });
+    }
+
+    PublicKey::from_str(value).map_err(|err| BiscuitCommandError {
+        kind: "invalid_public_key",
+        message: err.to_string(),
+    })
+}
+
+fn build_biscuit_source(
+    template_id: &str,
+    custom_source: &str,
+    expiry_rfc3339: &str,
+) -> Result<String, BiscuitCommandError> {
+    let expiry = validate_biscuit_expiry(expiry_rfc3339)?;
+    let mut source = biscuit_template_source(template_id, custom_source)?;
+    source.push_str(&format!(r#"check if time($time), $time <= {expiry};"#));
+    Ok(source)
+}
+
+fn biscuit_template_source(
+    template_id: &str,
+    custom_source: &str,
+) -> Result<String, BiscuitCommandError> {
+    let lines = match template_id {
+        "read_only" => BISCUIT_TEMPLATE_READ_ONLY.join("\n"),
+        "operator" => BISCUIT_TEMPLATE_OPERATOR.join("\n"),
+        "watchtower" => BISCUIT_TEMPLATE_WATCHTOWER.join("\n"),
+        "custom" => {
+            let source = custom_source.trim();
+            if source.is_empty() {
+                return Err(BiscuitCommandError {
+                    kind: "empty_custom_source",
+                    message: "Custom Biscuit source is empty".to_string(),
+                });
+            }
+            source.to_string()
+        }
+        _ => {
+            return Err(BiscuitCommandError {
+                kind: "unknown_template",
+                message: format!("Unknown Biscuit template: {template_id}"),
+            });
+        }
+    };
+
+    Ok(ensure_trailing_newline(lines))
+}
+
+fn validate_biscuit_expiry(input: &str) -> Result<String, BiscuitCommandError> {
+    let value = input.trim();
+
+    if value.len() < 20
+        || !value.ends_with('Z')
+        || value.chars().any(char::is_whitespace)
+        || !value.contains('T')
+    {
+        return Err(BiscuitCommandError {
+            kind: "invalid_expiry",
+            message: "Expiry must be an RFC3339 UTC timestamp like 2026-06-01T00:00:00Z"
+                .to_string(),
+        });
+    }
+
+    Ok(value.to_string())
+}
+
+fn ensure_trailing_newline(value: String) -> String {
+    if value.ends_with('\n') {
+        value
+    } else {
+        format!("{value}\n")
+    }
+}
+
+fn token_revocation_ids(token: &Biscuit) -> Vec<String> {
+    token
+        .revocation_identifiers()
+        .iter()
+        .map(|bytes| hex_encode(bytes))
         .collect()
 }
 
@@ -1038,7 +1363,12 @@ fn main() {
             wallet_import_ckb_key,
             wallet_export_encrypted_backup,
             wallet_validate_backup,
-            wallet_restore_encrypted_backup
+            wallet_restore_encrypted_backup,
+            biscuit_generate_keypair,
+            biscuit_import_private_key,
+            biscuit_templates,
+            biscuit_generate_token,
+            biscuit_inspect_token
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1050,9 +1380,14 @@ mod tests {
 
     #[test]
     fn endpoint_validation_rejects_bad_urls() {
-        assert_eq!(validate_endpoint("ftp://127.0.0.1:8227").unwrap_err().kind, "invalid_endpoint");
         assert_eq!(
-            validate_endpoint("http://user:pass@127.0.0.1:8227").unwrap_err().kind,
+            validate_endpoint("ftp://127.0.0.1:8227").unwrap_err().kind,
+            "invalid_endpoint"
+        );
+        assert_eq!(
+            validate_endpoint("http://user:pass@127.0.0.1:8227")
+                .unwrap_err()
+                .kind,
             "invalid_endpoint"
         );
     }
@@ -1063,9 +1398,15 @@ mod tests {
         let private = validate_endpoint("http://192.168.1.10:8227").unwrap();
         let unique_local = validate_endpoint("http://[fd00::1]:8227").unwrap();
 
-        assert_eq!(classify_endpoint(&loopback).unwrap(), EndpointScope::Loopback);
+        assert_eq!(
+            classify_endpoint(&loopback).unwrap(),
+            EndpointScope::Loopback
+        );
         assert_eq!(classify_endpoint(&private).unwrap(), EndpointScope::Private);
-        assert_eq!(classify_endpoint(&unique_local).unwrap(), EndpointScope::Private);
+        assert_eq!(
+            classify_endpoint(&unique_local).unwrap(),
+            EndpointScope::Private
+        );
     }
 
     #[test]
@@ -1120,5 +1461,45 @@ mod tests {
 
         assert_eq!(decrypted, plaintext);
         assert!(decrypt_key_backup(&envelope, "wrong backup passphrase").is_err());
+    }
+
+    #[test]
+    fn biscuit_private_key_round_trips_to_public_key() {
+        let keypair = biscuit_generate_keypair();
+        let imported = biscuit_import_private_key(keypair.private_key.clone()).unwrap();
+
+        assert_eq!(imported.public_key, keypair.public_key);
+        assert_eq!(imported.private_key, keypair.private_key);
+    }
+
+    #[test]
+    fn biscuit_operator_source_includes_expiry_and_write_permissions() {
+        let source = build_biscuit_source("operator", "", "2026-06-01T00:00:00Z").unwrap();
+
+        assert!(source.contains(r#"write("payments");"#));
+        assert!(source.contains(r#"read("graph");"#));
+        assert!(source.contains("check if time($time), $time <= 2026-06-01T00:00:00Z;"));
+    }
+
+    #[test]
+    fn biscuit_generated_token_can_be_verified_and_inspected() {
+        let keypair = biscuit_generate_keypair();
+        let output = biscuit_generate_token(BiscuitTokenInput {
+            private_key: keypair.private_key,
+            template_id: "read_only".to_string(),
+            custom_source: None,
+            expiry_rfc3339: "2026-06-01T00:00:00Z".to_string(),
+        })
+        .unwrap();
+
+        let report = biscuit_inspect_token(BiscuitInspectInput {
+            token: output.token,
+            public_key: output.public_key,
+        })
+        .unwrap();
+
+        assert_eq!(report.block_count, 1);
+        assert!(report.source.contains(r#"read("node");"#));
+        assert_eq!(report.revocation_ids.len(), 1);
     }
 }

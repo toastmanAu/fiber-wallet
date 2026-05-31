@@ -22,6 +22,7 @@ export type Profile = {
   configPath: string;
   p2pListeningAddr: string;
   rpcListeningAddr: string;
+  biscuitPublicKey: string;
   createdAt: string;
 };
 
@@ -43,6 +44,7 @@ type ProfileState = {
         | "configPath"
         | "p2pListeningAddr"
         | "rpcListeningAddr"
+        | "biscuitPublicKey"
       >
     >,
   ) => void;
@@ -64,6 +66,7 @@ const initialProfile: Profile = {
   configPath: "",
   p2pListeningAddr: "/ip4/127.0.0.1/tcp/8228",
   rpcListeningAddr: "127.0.0.1:8227",
+  biscuitPublicKey: "",
   createdAt: "2026-05-31T00:00:00.000Z",
 };
 
@@ -79,6 +82,7 @@ function withProfileDefaults(profile: Partial<Profile>): Profile {
     configPath: profile.configPath ?? "",
     p2pListeningAddr: profile.p2pListeningAddr ?? "/ip4/127.0.0.1/tcp/8228",
     rpcListeningAddr: profile.rpcListeningAddr ?? "127.0.0.1:8227",
+    biscuitPublicKey: profile.biscuitPublicKey ?? "",
   };
 }
 

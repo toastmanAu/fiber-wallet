@@ -11,6 +11,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { useState } from "react";
+import { AuthVaultPanel } from "./features/auth/AuthVaultPanel";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { NodeManagerPanel } from "./features/settings/NodeManagerPanel";
@@ -83,6 +84,7 @@ export default function App() {
         {activeView === "terminal" ? <JsonRpcConsole /> : null}
         {activeView === "settings" ? <NodeManagerPanel /> : null}
         {activeView === "wallet" ? <WalletKeyPanel /> : null}
+        {activeView === "auth" ? <AuthVaultPanel /> : null}
         {activeView === "dashboard" || activeView === "profiles" ? (
           <section className="content-grid">
             <Dashboard />
@@ -93,7 +95,8 @@ export default function App() {
         activeView !== "profiles" &&
         activeView !== "terminal" &&
         activeView !== "settings" &&
-        activeView !== "wallet" ? (
+        activeView !== "wallet" &&
+        activeView !== "auth" ? (
           <section className="placeholder-panel">
             <h2>{activeNav.label}</h2>
             <p>This section is queued behind the RPC connectivity slice.</p>

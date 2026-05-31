@@ -3,7 +3,7 @@
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::{net::IpAddr, time::Duration};
 use url::Url;
 
 const ALLOWED_RPC_METHODS: &[&str] = &[
@@ -53,11 +53,18 @@ struct JsonRpcErrorBody {
     message: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct RpcClientError {
     kind: &'static str,
     message: String,
     status: Option<u16>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum EndpointScope {
+    Loopback,
+    Private,
+    Public,
 }
 
 #[tauri::command]
@@ -97,6 +104,13 @@ async fn rpc_call(
     }
 
     let endpoint = validate_endpoint(&endpoint)?;
+    let token = token.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    });
+
+    enforce_endpoint_auth(&endpoint, token.as_deref())?;
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
@@ -115,8 +129,8 @@ async fn rpc_call(
 
     let mut request = client.post(endpoint).json(&body);
 
-    if let Some(token) = token.filter(|value| !value.trim().is_empty()) {
-        request = request.bearer_auth(token.trim());
+    if let Some(token) = token {
+        request = request.bearer_auth(token);
     }
 
     let response = request.send().await.map_err(map_transport_error)?;
@@ -195,6 +209,58 @@ fn validate_endpoint(endpoint: &str) -> Result<Url, RpcClientError> {
     Ok(parsed)
 }
 
+fn enforce_endpoint_auth(endpoint: &Url, token: Option<&str>) -> Result<(), RpcClientError> {
+    match classify_endpoint(endpoint)? {
+        EndpointScope::Public if token.is_none() => Err(RpcClientError {
+            kind: "public_rpc_requires_auth",
+            message: "Public RPC endpoint requires Biscuit auth".to_string(),
+            status: None,
+        }),
+        _ => Ok(()),
+    }
+}
+
+fn classify_endpoint(endpoint: &Url) -> Result<EndpointScope, RpcClientError> {
+    let host = endpoint.host_str().ok_or_else(|| RpcClientError {
+        kind: "invalid_endpoint",
+        message: "Fiber RPC endpoint must include a host".to_string(),
+        status: None,
+    })?;
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+
+    if host.eq_ignore_ascii_case("localhost") {
+        return Ok(EndpointScope::Loopback);
+    }
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if ip.is_loopback() {
+            return Ok(EndpointScope::Loopback);
+        }
+
+        if is_private_ip(ip) {
+            return Ok(EndpointScope::Private);
+        }
+    }
+
+    Ok(EndpointScope::Public)
+}
+
+fn is_private_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            ip.is_private()
+                || ip.is_link_local()
+                || ip.is_unspecified()
+                || ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000) == 0b0100_0000
+        }
+        IpAddr::V6(ip) => {
+            ip.is_unique_local()
+                || ip.is_unicast_link_local()
+                || ip.is_unspecified()
+        }
+    }
+}
+
 fn map_transport_error(err: reqwest::Error) -> RpcClientError {
     let kind = if err.is_timeout() {
         "timeout"
@@ -237,4 +303,47 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_validation_rejects_bad_urls() {
+        assert_eq!(validate_endpoint("ftp://127.0.0.1:8227").unwrap_err().kind, "invalid_endpoint");
+        assert_eq!(
+            validate_endpoint("http://user:pass@127.0.0.1:8227").unwrap_err().kind,
+            "invalid_endpoint"
+        );
+    }
+
+    #[test]
+    fn endpoint_classification_detects_loopback_and_private() {
+        let loopback = validate_endpoint("http://127.0.0.1:8227").unwrap();
+        let private = validate_endpoint("http://192.168.1.10:8227").unwrap();
+        let unique_local = validate_endpoint("http://[fd00::1]:8227").unwrap();
+
+        assert_eq!(classify_endpoint(&loopback).unwrap(), EndpointScope::Loopback);
+        assert_eq!(classify_endpoint(&private).unwrap(), EndpointScope::Private);
+        assert_eq!(classify_endpoint(&unique_local).unwrap(), EndpointScope::Private);
+    }
+
+    #[test]
+    fn endpoint_auth_blocks_public_without_token() {
+        let public = validate_endpoint("https://fiber.example.com").unwrap();
+
+        assert_eq!(
+            enforce_endpoint_auth(&public, None).unwrap_err().kind,
+            "public_rpc_requires_auth"
+        );
+        assert!(enforce_endpoint_auth(&public, Some("token")).is_ok());
+    }
+
+    #[test]
+    fn endpoint_auth_allows_loopback_without_token() {
+        let loopback = validate_endpoint("http://localhost:8227").unwrap();
+
+        assert!(enforce_endpoint_auth(&loopback, None).is_ok());
+    }
 }

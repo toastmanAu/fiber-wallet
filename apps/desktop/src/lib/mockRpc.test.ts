@@ -44,6 +44,47 @@ describe("mockFiberRpc", () => {
     });
   });
 
+  it("tracks mock external funding open, sign, and submit", async () => {
+    const pubkey = `03${"33".repeat(32)}`;
+    const script = {
+      code_hash: `0x${"44".repeat(32)}`,
+      hash_type: "type",
+      args: "0x",
+    };
+    const opened = await mockFiberRpc("open_channel_with_external_funding", {
+      pubkey,
+      funding_amount: "49900000000",
+      public: true,
+      shutdown_script: script,
+      funding_lock_script: script,
+    });
+    expect(opened).toMatchObject({
+      channel_id: expect.any(String),
+      unsigned_funding_tx: {
+        witnesses: [],
+      },
+    });
+
+    const signed = await mockFiberRpc("sign_external_funding_tx", {
+      unsigned_funding_tx: (opened as { unsigned_funding_tx: unknown }).unsigned_funding_tx,
+      private_key: `0x${"55".repeat(32)}`,
+    });
+    expect(signed).toMatchObject({
+      signed_funding_tx: {
+        witnesses: [expect.any(String)],
+      },
+    });
+
+    await expect(
+      mockFiberRpc("submit_signed_funding_tx", {
+        channel_id: (opened as { channel_id: string }).channel_id,
+        signed_funding_tx: (signed as { signed_funding_tx: unknown }).signed_funding_tx,
+      }),
+    ).resolves.toMatchObject({
+      funding_tx_hash: expect.any(String),
+    });
+  });
+
   it("tracks mock invoice and payment flow", async () => {
     const invoice = await mockFiberRpc("new_invoice", {
       amount: "100000000",

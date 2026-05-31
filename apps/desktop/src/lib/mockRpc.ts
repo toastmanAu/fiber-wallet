@@ -161,6 +161,30 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
     return { temporary_channel_id: channelId };
   }
 
+  if (method === "open_channel_with_external_funding") {
+    const input = objectParams(params);
+    const pubkey = stringParam(input.pubkey);
+    const fundingAmount = stringParam(input.funding_amount) ?? stringParam(input.fundingAmount);
+
+    if (!pubkey || !fundingAmount || !input.shutdown_script || !input.funding_lock_script) {
+      throw new Error("mock RPC external funding requires pubkey, funding_amount, shutdown_script, and funding_lock_script");
+    }
+
+    const channelId = `0x${(mockChannels.length + 1).toString(16).padStart(64, "4")}`;
+    mockChannels.push({
+      channel_id: channelId,
+      peer_pubkey: pubkey,
+      state: "awaiting_external_funding",
+      funding_amount: fundingAmount,
+      public: input.public !== false,
+    });
+
+    return {
+      channel_id: channelId,
+      unsigned_funding_tx: mockFundingTx(input.funding_lock_script, input.shutdown_script, fundingAmount),
+    };
+  }
+
   if (method === "shutdown_channel") {
     const channelId = stringParam(objectParams(params).channel_id);
     const channel = mockChannels.find((item) => item.channel_id === channelId);
@@ -169,6 +193,31 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
     }
 
     return {};
+  }
+
+  if (method === "submit_signed_funding_tx") {
+    const input = objectParams(params);
+    const channelId = stringParam(input.channel_id);
+    const channel = mockChannels.find((item) => item.channel_id === channelId);
+    if (channel) {
+      channel.state = "funding_tx_submitted";
+    }
+
+    return {
+      channel_id: channelId,
+      funding_tx_hash: `0x${"55".repeat(32)}`,
+    };
+  }
+
+  if (method === "sign_external_funding_tx") {
+    const input = objectParams(params);
+    const unsignedTx = isRecord(input.unsigned_funding_tx) ? input.unsigned_funding_tx : {};
+    return {
+      signed_funding_tx: {
+        ...unsignedTx,
+        witnesses: ["0x5500000010000000550000005500000041000000"],
+      },
+    };
   }
 
   if (method === "new_invoice") {
@@ -343,4 +392,37 @@ function pubkeyFromAddress(address: string | undefined): string {
   }
 
   return `03${"ab".repeat(32)}`;
+}
+
+function mockFundingTx(fundingLockScript: unknown, shutdownScript: unknown, fundingAmount: string): Record<string, unknown> {
+  return {
+    version: "0x0",
+    cell_deps: [],
+    header_deps: [],
+    inputs: [
+      {
+        previous_output: {
+          tx_hash: `0x${"11".repeat(32)}`,
+          index: "0x0",
+        },
+        since: "0x0",
+      },
+    ],
+    outputs: [
+      {
+        capacity: fundingAmount,
+        lock: fundingLockScript,
+      },
+      {
+        capacity: "0x0",
+        lock: shutdownScript,
+      },
+    ],
+    outputs_data: ["0x", "0x"],
+    witnesses: [],
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

@@ -15,6 +15,7 @@ import { useState } from "react";
 import { AuthVaultPanel } from "./features/auth/AuthVaultPanel";
 import { ChannelsPanel } from "./features/channels/ChannelsPanel";
 import { Dashboard } from "./features/dashboard/Dashboard";
+import { ExternalSignerPanel } from "./features/external/ExternalSignerPanel";
 import { GraphDiagnosticsPanel } from "./features/graph/GraphDiagnosticsPanel";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { PaymentsPanel } from "./features/payments/PaymentsPanel";
@@ -31,6 +32,7 @@ type NavId =
   | "auth"
   | "peers"
   | "channels"
+  | "external"
   | "payments"
   | "graph"
   | "terminal"
@@ -43,6 +45,7 @@ const navItems = [
   { id: "auth", label: "Auth Vault", icon: Shield },
   { id: "peers", label: "Peers", icon: RadioTower },
   { id: "channels", label: "Channels", icon: Cable },
+  { id: "external", label: "External Signer", icon: KeyRound },
   { id: "payments", label: "Payments", icon: ReceiptText },
   { id: "graph", label: "Graph", icon: Network },
   { id: "terminal", label: "Terminal", icon: TerminalSquare },
@@ -103,6 +106,7 @@ export default function App() {
         {activeView === "auth" ? <AuthVaultPanel /> : null}
         {activeView === "peers" ? <PeersPanel /> : null}
         {activeView === "channels" ? <ChannelsPanel /> : null}
+        {activeView === "external" ? <ExternalSignerPanel /> : null}
         {activeView === "payments" ? <PaymentsPanel /> : null}
         {activeView === "graph" ? <GraphDiagnosticsPanel /> : null}
         {activeView === "dashboard" || activeView === "profiles" ? (
@@ -119,6 +123,7 @@ export default function App() {
         activeView !== "auth" &&
         activeView !== "peers" &&
         activeView !== "channels" &&
+        activeView !== "external" &&
         activeView !== "payments" &&
         activeView !== "graph" ? (
           <section className="placeholder-panel">

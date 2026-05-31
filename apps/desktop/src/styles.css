@@ -391,6 +391,37 @@ h2 {
   color: #ffe2a6;
 }
 
+.signer-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.wallet-boundary {
+  display: grid;
+  gap: 6px;
+  min-height: 86px;
+  border: 1px solid rgba(142, 175, 166, 0.22);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.58);
+  padding: 14px;
+}
+
+.wallet-boundary strong {
+  color: #d9fff5;
+}
+
+.wallet-boundary span {
+  color: #9eb6af;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.wallet-boundary.external {
+  border-color: rgba(241, 64, 255, 0.26);
+}
+
 .graph-canvas {
   width: 100%;
   min-height: 320px;
@@ -573,6 +604,7 @@ h2 {
   .metrics-grid,
   .console-grid,
   .resource-grid,
+  .signer-split,
   .settings-row,
   .health-check-row {
     grid-template-columns: 1fr;

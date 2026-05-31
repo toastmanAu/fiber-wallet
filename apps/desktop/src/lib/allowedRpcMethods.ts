@@ -4,10 +4,12 @@ export const allowedRpcMethods = [
   "disconnect_peer",
   "list_peers",
   "open_channel",
+  "open_channel_with_external_funding",
   "accept_channel",
   "list_channels",
   "update_channel",
   "shutdown_channel",
+  "submit_signed_funding_tx",
   "new_invoice",
   "parse_invoice",
   "get_invoice",
@@ -19,7 +21,7 @@ export const allowedRpcMethods = [
   "list_payments",
   "graph_nodes",
   "graph_channels",
+  "sign_external_funding_tx",
 ] as const;
 
 export type AllowedRpcMethod = (typeof allowedRpcMethods)[number];
-

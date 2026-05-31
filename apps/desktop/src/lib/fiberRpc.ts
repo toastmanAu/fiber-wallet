@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { blocksLiveRpc } from "./endpointSafety";
 import { mockFiberRpc } from "./mockRpc";
 import type { Profile } from "./profileStore";
 
@@ -16,6 +17,14 @@ export type RpcClientError = {
 export async function fiberRpc<T>(method: string, params: unknown[] = [], options: FiberRpcOptions): Promise<T> {
   if (options.profile.rpcMode === "mock") {
     return mockFiberRpc(method) as Promise<T>;
+  }
+
+  const blocked = blocksLiveRpc(options.profile, options.token);
+  if (blocked) {
+    throw {
+      kind: blocked.kind === "invalid" ? "invalid_endpoint" : "public_rpc_requires_auth",
+      message: blocked.message,
+    } satisfies RpcClientError;
   }
 
   return invoke<T>("rpc_call", {

@@ -292,6 +292,38 @@ h2 {
   outline-offset: 1px;
 }
 
+.safety-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  border: 1px solid rgba(0, 224, 168, 0.22);
+  border-radius: 8px;
+  background: rgba(0, 224, 168, 0.08);
+  color: #d9fff5;
+  padding: 8px 10px;
+}
+
+.safety-banner.danger {
+  border-color: rgba(255, 95, 95, 0.35);
+  background: rgba(255, 95, 95, 0.09);
+  color: #ffd4d4;
+}
+
+.health-check-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.health-check-row span {
+  min-width: 0;
+  color: #9eb6af;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .console-grid {
   display: grid;
   grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
@@ -364,7 +396,8 @@ h2 {
 
   .content-grid,
   .metrics-grid,
-  .console-grid {
+  .console-grid,
+  .health-check-row {
     grid-template-columns: 1fr;
   }
 }

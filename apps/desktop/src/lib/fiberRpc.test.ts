@@ -21,4 +21,18 @@ describe("fiberRpc", () => {
       node_name: "mock-fiber-node",
     });
   });
+
+  it("blocks public live endpoints without a token", async () => {
+    await expect(
+      fiberRpc("node_info", [], {
+        profile: {
+          ...mockProfile,
+          rpcMode: "live",
+          fiberRpcEndpoint: "https://fiber.example.com",
+        },
+      }),
+    ).rejects.toMatchObject({
+      kind: "public_rpc_requires_auth",
+    });
+  });
 });

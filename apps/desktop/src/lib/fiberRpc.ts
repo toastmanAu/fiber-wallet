@@ -8,15 +8,17 @@ export type FiberRpcOptions = {
   token?: string;
 };
 
+export type FiberRpcParams = unknown[] | Record<string, unknown>;
+
 export type RpcClientError = {
   kind: string;
   message: string;
   status?: number;
 };
 
-export async function fiberRpc<T>(method: string, params: unknown[] = [], options: FiberRpcOptions): Promise<T> {
+export async function fiberRpc<T>(method: string, params: FiberRpcParams = [], options: FiberRpcOptions): Promise<T> {
   if (options.profile.rpcMode === "mock") {
-    return mockFiberRpc(method) as Promise<T>;
+    return mockFiberRpc(method, params) as Promise<T>;
   }
 
   const blocked = blocksLiveRpc(options.profile, options.token);

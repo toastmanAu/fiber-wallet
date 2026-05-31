@@ -9,8 +9,42 @@ describe("mockFiberRpc", () => {
     });
   });
 
+  it("tracks mock peer connect and disconnect", async () => {
+    const pubkey = `03${"11".repeat(32)}`;
+    await mockFiberRpc("connect_peer", { pubkey });
+    await expect(mockFiberRpc("list_peers")).resolves.toMatchObject({
+      peers: [{ pubkey }],
+    });
+
+    await mockFiberRpc("disconnect_peer", { pubkey });
+    await expect(mockFiberRpc("list_peers")).resolves.toMatchObject({
+      peers: [],
+    });
+  });
+
+  it("tracks mock channel open and shutdown", async () => {
+    const pubkey = `03${"22".repeat(32)}`;
+    const opened = await mockFiberRpc("open_channel", {
+      pubkey,
+      funding_amount: "49900000000",
+      public: true,
+    });
+    expect(opened).toMatchObject({ temporary_channel_id: expect.any(String) });
+
+    const channels = await mockFiberRpc("list_channels");
+    expect(channels).toMatchObject({
+      channels: [{ peer_pubkey: pubkey, state: "awaiting_channel_ready" }],
+    });
+
+    await mockFiberRpc("shutdown_channel", {
+      channel_id: (opened as { temporary_channel_id: string }).temporary_channel_id,
+    });
+    await expect(mockFiberRpc("list_channels", { include_closed: true })).resolves.toMatchObject({
+      channels: [{ peer_pubkey: pubkey, state: "closed" }],
+    });
+  });
+
   it("rejects unknown methods", async () => {
-    await expect(mockFiberRpc("open_channel")).rejects.toThrow("not implemented");
+    await expect(mockFiberRpc("unknown_method")).rejects.toThrow("not implemented");
   });
 });
-

@@ -12,8 +12,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { AuthVaultPanel } from "./features/auth/AuthVaultPanel";
+import { ChannelsPanel } from "./features/channels/ChannelsPanel";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
+import { PeersPanel } from "./features/peers/PeersPanel";
 import { NodeManagerPanel } from "./features/settings/NodeManagerPanel";
 import { JsonRpcConsole } from "./features/terminal/JsonRpcConsole";
 import { WalletKeyPanel } from "./features/wallet/WalletKeyPanel";
@@ -85,6 +87,8 @@ export default function App() {
         {activeView === "settings" ? <NodeManagerPanel /> : null}
         {activeView === "wallet" ? <WalletKeyPanel /> : null}
         {activeView === "auth" ? <AuthVaultPanel /> : null}
+        {activeView === "peers" ? <PeersPanel /> : null}
+        {activeView === "channels" ? <ChannelsPanel /> : null}
         {activeView === "dashboard" || activeView === "profiles" ? (
           <section className="content-grid">
             <Dashboard />
@@ -96,7 +100,9 @@ export default function App() {
         activeView !== "terminal" &&
         activeView !== "settings" &&
         activeView !== "wallet" &&
-        activeView !== "auth" ? (
+        activeView !== "auth" &&
+        activeView !== "peers" &&
+        activeView !== "channels" ? (
           <section className="placeholder-panel">
             <h2>{activeNav.label}</h2>
             <p>This section is queued behind the RPC connectivity slice.</p>

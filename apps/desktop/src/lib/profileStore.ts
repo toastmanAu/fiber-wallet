@@ -7,6 +7,13 @@ export type PqrLockAlgorithm = "mldsa" | "spincs" | "falcon";
 export type RecoveryFormat = "bip39";
 export type RpcMode = "mock" | "live";
 
+export type PeerAddressBookEntry = {
+  id: string;
+  label: string;
+  address: string;
+  pubkey: string;
+};
+
 export type Profile = {
   id: string;
   name: string;
@@ -23,6 +30,7 @@ export type Profile = {
   p2pListeningAddr: string;
   rpcListeningAddr: string;
   biscuitPublicKey: string;
+  peerAddressBook: PeerAddressBookEntry[];
   createdAt: string;
 };
 
@@ -45,6 +53,7 @@ type ProfileState = {
         | "p2pListeningAddr"
         | "rpcListeningAddr"
         | "biscuitPublicKey"
+        | "peerAddressBook"
       >
     >,
   ) => void;
@@ -67,6 +76,7 @@ const initialProfile: Profile = {
   p2pListeningAddr: "/ip4/127.0.0.1/tcp/8228",
   rpcListeningAddr: "127.0.0.1:8227",
   biscuitPublicKey: "",
+  peerAddressBook: [],
   createdAt: "2026-05-31T00:00:00.000Z",
 };
 
@@ -83,6 +93,7 @@ function withProfileDefaults(profile: Partial<Profile>): Profile {
     p2pListeningAddr: profile.p2pListeningAddr ?? "/ip4/127.0.0.1/tcp/8228",
     rpcListeningAddr: profile.rpcListeningAddr ?? "127.0.0.1:8227",
     biscuitPublicKey: profile.biscuitPublicKey ?? "",
+    peerAddressBook: Array.isArray(profile.peerAddressBook) ? profile.peerAddressBook : [],
   };
 }
 

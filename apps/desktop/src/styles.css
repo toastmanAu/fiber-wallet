@@ -313,6 +313,84 @@ h2 {
   gap: 10px;
 }
 
+.resource-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+}
+
+.resource-grid h2 {
+  margin-top: 14px;
+}
+
+.resource-grid h2:first-child {
+  margin-top: 0;
+}
+
+.resource-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.resource-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(142, 175, 166, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.58);
+  padding: 12px;
+}
+
+.resource-card strong,
+.resource-card small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resource-card small,
+.compact-meta {
+  color: #9eb6af;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.resource-card-main {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.warning-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid rgba(0, 224, 168, 0.22);
+  border-radius: 8px;
+  background: rgba(0, 224, 168, 0.08);
+  color: #d9fff5;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.warning-note.danger {
+  border-color: rgba(255, 196, 87, 0.42);
+  background: rgba(255, 196, 87, 0.1);
+  color: #ffe2a6;
+}
+
 .node-status {
   display: grid;
   gap: 10px;
@@ -462,6 +540,7 @@ h2 {
   .content-grid,
   .metrics-grid,
   .console-grid,
+  .resource-grid,
   .settings-row,
   .health-check-row {
     grid-template-columns: 1fr;

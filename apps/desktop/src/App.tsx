@@ -13,6 +13,7 @@ import {
 import { useState } from "react";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
+import { NodeManagerPanel } from "./features/settings/NodeManagerPanel";
 import { JsonRpcConsole } from "./features/terminal/JsonRpcConsole";
 import { useProfileStore } from "./lib/profileStore";
 
@@ -79,13 +80,14 @@ export default function App() {
         </header>
 
         {activeView === "terminal" ? <JsonRpcConsole /> : null}
+        {activeView === "settings" ? <NodeManagerPanel /> : null}
         {activeView === "dashboard" || activeView === "profiles" ? (
           <section className="content-grid">
             <Dashboard />
             <OnboardingPanel />
           </section>
         ) : null}
-        {activeView !== "dashboard" && activeView !== "profiles" && activeView !== "terminal" ? (
+        {activeView !== "dashboard" && activeView !== "profiles" && activeView !== "terminal" && activeView !== "settings" ? (
           <section className="placeholder-panel">
             <h2>{activeNav.label}</h2>
             <p>This section is queued behind the RPC connectivity slice.</p>

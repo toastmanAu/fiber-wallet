@@ -12,6 +12,11 @@ const mockProfile: Profile = {
   recoveryFormat: "bip39",
   fiberRpcEndpoint: "http://127.0.0.1:8227",
   ckbRpcEndpoint: "https://testnet.ckbapp.dev/",
+  fnnBinaryPath: "",
+  dataDir: "",
+  configPath: "",
+  p2pListeningAddr: "/ip4/127.0.0.1/tcp/8228",
+  rpcListeningAddr: "127.0.0.1:8227",
   createdAt: "2026-05-31T00:00:00.000Z",
 };
 

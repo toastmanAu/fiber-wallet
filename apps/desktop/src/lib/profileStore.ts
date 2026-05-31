@@ -17,6 +17,11 @@ export type Profile = {
   recoveryFormat: RecoveryFormat;
   fiberRpcEndpoint: string;
   ckbRpcEndpoint: string;
+  fnnBinaryPath: string;
+  dataDir: string;
+  configPath: string;
+  p2pListeningAddr: string;
+  rpcListeningAddr: string;
   createdAt: string;
 };
 
@@ -26,7 +31,21 @@ type ProfileState = {
   sessionBiscuitToken: string;
   createMockProfile: () => void;
   setActiveProfile: (id: string) => void;
-  updateActiveProfile: (updates: Partial<Pick<Profile, "rpcMode" | "fiberRpcEndpoint" | "ckbRpcEndpoint">>) => void;
+  updateActiveProfile: (
+    updates: Partial<
+      Pick<
+        Profile,
+        | "rpcMode"
+        | "fiberRpcEndpoint"
+        | "ckbRpcEndpoint"
+        | "fnnBinaryPath"
+        | "dataDir"
+        | "configPath"
+        | "p2pListeningAddr"
+        | "rpcListeningAddr"
+      >
+    >,
+  ) => void;
   setSessionBiscuitToken: (token: string) => void;
 };
 
@@ -40,6 +59,11 @@ const initialProfile: Profile = {
   recoveryFormat: "bip39",
   fiberRpcEndpoint: "http://127.0.0.1:8227",
   ckbRpcEndpoint: "https://testnet.ckbapp.dev/",
+  fnnBinaryPath: "",
+  dataDir: "",
+  configPath: "",
+  p2pListeningAddr: "/ip4/127.0.0.1/tcp/8228",
+  rpcListeningAddr: "127.0.0.1:8227",
   createdAt: "2026-05-31T00:00:00.000Z",
 };
 
@@ -50,6 +74,11 @@ function withProfileDefaults(profile: Partial<Profile>): Profile {
     rpcMode: profile.rpcMode ?? "mock",
     preferredPqrLock: profile.preferredPqrLock ?? "mldsa",
     recoveryFormat: profile.recoveryFormat ?? "bip39",
+    fnnBinaryPath: profile.fnnBinaryPath ?? "",
+    dataDir: profile.dataDir ?? "",
+    configPath: profile.configPath ?? "",
+    p2pListeningAddr: profile.p2pListeningAddr ?? "/ip4/127.0.0.1/tcp/8228",
+    rpcListeningAddr: profile.rpcListeningAddr ?? "127.0.0.1:8227",
   };
 }
 

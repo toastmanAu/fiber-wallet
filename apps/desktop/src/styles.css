@@ -148,6 +148,7 @@ h2 {
 .dashboard-panel,
 .setup-panel,
 .console-panel,
+.settings-panel,
 .placeholder-panel {
   border: 1px solid rgba(142, 175, 166, 0.22);
   border-radius: 8px;
@@ -286,6 +287,43 @@ h2 {
   padding: 0 10px;
 }
 
+.settings-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.node-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.node-status {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(142, 175, 166, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.58);
+  padding: 12px;
+}
+
+.node-status strong {
+  color: #d9fff5;
+}
+
+.node-status pre {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  color: #b8cbc5;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .settings-form input:focus,
 .settings-form select:focus {
   outline: 2px solid rgba(0, 224, 168, 0.3);
@@ -397,6 +435,7 @@ h2 {
   .content-grid,
   .metrics-grid,
   .console-grid,
+  .settings-row,
   .health-check-row {
     grid-template-columns: 1fr;
   }

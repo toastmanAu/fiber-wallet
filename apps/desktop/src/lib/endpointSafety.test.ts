@@ -12,6 +12,11 @@ const profile: Profile = {
   recoveryFormat: "bip39",
   fiberRpcEndpoint: "https://fiber.example.com",
   ckbRpcEndpoint: "https://testnet.ckbapp.dev/",
+  fnnBinaryPath: "",
+  dataDir: "",
+  configPath: "",
+  p2pListeningAddr: "/ip4/127.0.0.1/tcp/8228",
+  rpcListeningAddr: "127.0.0.1:8227",
   createdAt: "2026-05-31T00:00:00.000Z",
 };
 
@@ -51,4 +56,3 @@ describe("blocksLiveRpc", () => {
     expect(blocksLiveRpc({ ...profile, rpcMode: "mock" })).toBeNull();
   });
 });
-

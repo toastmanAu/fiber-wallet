@@ -230,6 +230,18 @@ h2 {
   opacity: 0.65;
 }
 
+.command-button.ghost {
+  border-color: rgba(142, 175, 166, 0.24);
+  background: rgba(142, 175, 166, 0.08);
+  color: #dcece7;
+}
+
+.command-button.danger {
+  border-color: rgba(255, 196, 87, 0.48);
+  background: rgba(255, 196, 87, 0.14);
+  color: #ffe2a6;
+}
+
 .profile-list {
   display: grid;
   gap: 10px;
@@ -311,6 +323,61 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.confirm-action {
+  display: inline-block;
+}
+
+.confirm-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid rgba(255, 196, 87, 0.34);
+  border-radius: 8px;
+  background: #0d1213;
+  color: #eff7f3;
+  padding: 0;
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.confirm-dialog form {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.confirm-dialog dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.confirm-dialog dl div {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.confirm-dialog dt {
+  color: #9eb6af;
+}
+
+.confirm-dialog dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog p {
+  border: 1px solid rgba(255, 196, 87, 0.34);
+  border-radius: 8px;
+  background: rgba(255, 196, 87, 0.1);
+  color: #ffe2a6;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .resource-grid {

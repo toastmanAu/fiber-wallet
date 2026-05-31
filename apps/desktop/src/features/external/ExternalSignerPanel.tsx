@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Cable, FileCheck2, FileSignature, SendHorizontal, ShieldAlert } from "lucide-react";
 import { useState } from "react";
+import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import {
   compareFundingTxStructure,
   formatJson,
@@ -154,11 +155,21 @@ export function ExternalSignerPanel() {
               <ShieldAlert size={16} aria-hidden="true" />
               <span>Fiber requires the signed transaction to preserve inputs, outputs, outputs_data, and cell_deps exactly.</span>
             </div>
-            <button
-              className="command-button"
+            <ConfirmActionButton
+              confirmLabel="Open External"
               disabled={isBusy}
-              type="button"
-              onClick={() =>
+              icon={<Cable size={16} aria-hidden="true" />}
+              items={[
+                { label: "Peer pubkey", value: peerPubkey },
+                { label: "Funding amount", value: fundingAmount },
+                { label: "Signer path", value: signerKind },
+                { label: "Signer address", value: signerAddress || "not set" },
+                { label: "Visibility", value: publicChannel ? "public" : "private" },
+              ]}
+              label="Open External"
+              title="Confirm External Funding"
+              warning="This creates an externally funded channel draft through the active Fiber RPC profile."
+              onConfirm={() =>
                 run(async () => {
                   const result = await fiberRpc<ExternalFundingResult>(
                     "open_channel_with_external_funding",
@@ -186,10 +197,7 @@ export function ExternalSignerPanel() {
                   return "Unsigned external funding transaction received";
                 })
               }
-            >
-              <Cable size={16} aria-hidden="true" />
-              <span>Open External</span>
-            </button>
+            />
           </div>
         </div>
 
@@ -269,11 +277,19 @@ export function ExternalSignerPanel() {
                 <FileSignature size={16} aria-hidden="true" />
                 <span>{signerKind === "dev-rpc" ? "Dev Sign" : "Prepare Sign"}</span>
               </button>
-              <button
-                className="command-button"
+              <ConfirmActionButton
+                confirmLabel="Submit Signed"
                 disabled={isBusy || !structureReport?.unchanged}
-                type="button"
-                onClick={() =>
+                icon={<SendHorizontal size={16} aria-hidden="true" />}
+                items={[
+                  { label: "Channel ID", value: channelId },
+                  { label: "Signer path", value: signerKind },
+                  { label: "Structure check", value: structureReport?.unchanged ? "passed" : "not passed" },
+                ]}
+                label="Submit Signed"
+                title="Confirm Signed Funding Submit"
+                warning="This submits the signed funding transaction through the active Fiber RPC profile."
+                onConfirm={() =>
                   run(async () => {
                     const signed_funding_tx = parseJsonObject(signedTxText);
                     const result = await fiberRpc(
@@ -291,10 +307,7 @@ export function ExternalSignerPanel() {
                     return "Signed external funding transaction submitted";
                   }, true)
                 }
-              >
-                <SendHorizontal size={16} aria-hidden="true" />
-                <span>Submit Signed</span>
-              </button>
+              />
             </div>
           </div>
 

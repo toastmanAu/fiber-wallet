@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cable, RefreshCcw, ShieldAlert, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
@@ -139,11 +140,20 @@ export function ChannelsPanel() {
                   "Public testnet nodes currently advertise >= 499 CKB auto-accept funding; fee and reserved-capacity checks still need live balance data."}
               </span>
             </div>
-            <button
-              className="command-button"
+            <ConfirmActionButton
+              confirmLabel="Open Channel"
               disabled={isBusy}
-              type="button"
-              onClick={() =>
+              icon={<Cable size={16} aria-hidden="true" />}
+              items={[
+                { label: "Peer pubkey", value: openPubkey },
+                { label: "Funding amount", value: fundingAmount },
+                { label: "Visibility", value: publicChannel ? "public" : "private" },
+                { label: "Direction", value: oneWay ? "one-way" : "standard" },
+              ]}
+              label="Open Channel"
+              title="Confirm Channel Open"
+              warning="Opening a channel commits funding through the active Fiber RPC profile."
+              onConfirm={() =>
                 run(async () => {
                   await fiberRpc(
                     "open_channel",
@@ -161,10 +171,7 @@ export function ChannelsPanel() {
                   return "Open channel requested";
                 })
               }
-            >
-              <Cable size={16} aria-hidden="true" />
-              <span>Open Channel</span>
-            </button>
+            />
           </div>
 
           <h2>Shutdown</h2>
@@ -185,11 +192,18 @@ export function ChannelsPanel() {
               <input checked={forceShutdown} onChange={(event) => setForceShutdown(event.target.checked)} type="checkbox" />
               <span>Force close</span>
             </label>
-            <button
-              className="command-button"
+            <ConfirmActionButton
+              confirmLabel="Shutdown"
               disabled={isBusy || shutdownConfirm !== "shutdown"}
-              type="button"
-              onClick={() =>
+              icon={<XCircle size={16} aria-hidden="true" />}
+              items={[
+                { label: "Channel ID", value: shutdownChannelId },
+                { label: "Close mode", value: forceShutdown ? "force close" : "cooperative close" },
+              ]}
+              label="Shutdown"
+              title="Confirm Channel Shutdown"
+              warning="Shutdown changes channel state through the active Fiber RPC profile."
+              onConfirm={() =>
                 run(async () => {
                   await fiberRpc(
                     "shutdown_channel",
@@ -205,10 +219,7 @@ export function ChannelsPanel() {
                   return "Shutdown requested";
                 })
               }
-            >
-              <XCircle size={16} aria-hidden="true" />
-              <span>Shutdown</span>
-            </button>
+            />
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSearch, ReceiptText, RefreshCcw, SendHorizontal, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
@@ -308,10 +309,22 @@ export function PaymentsPanel() {
                 <FileSearch size={16} aria-hidden="true" />
                 <span>Preview</span>
               </button>
-              <button className="command-button" disabled={isBusy} type="button" onClick={() => run(() => sendPayment(false), true)}>
-                <SendHorizontal size={16} aria-hidden="true" />
-                <span>Send</span>
-              </button>
+              <ConfirmActionButton
+                confirmLabel="Send Payment"
+                disabled={isBusy}
+                icon={<SendHorizontal size={16} aria-hidden="true" />}
+                items={[
+                  { label: "Invoice", value: invoiceText ? shorten(invoiceText) : "not set" },
+                  { label: "Target pubkey", value: targetPubkey ? shorten(targetPubkey) : "not set" },
+                  { label: "Amount", value: paymentAmount || "from invoice" },
+                  { label: "Max fee", value: maxFeeAmount || "node default" },
+                  { label: "Timeout", value: `${timeout} seconds` },
+                ]}
+                label="Send"
+                title="Confirm Payment Send"
+                warning="Send broadcasts the payment through the active Fiber RPC profile."
+                onConfirm={() => run(() => sendPayment(false), true)}
+              />
             </div>
           </div>
 

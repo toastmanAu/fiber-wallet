@@ -104,6 +104,13 @@ struct RpcClientError {
     status: Option<u16>,
 }
 
+#[derive(Serialize)]
+struct CkbRpcHealth {
+    endpoint: String,
+    tip_block_number: Option<Value>,
+    status: String,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum EndpointScope {
     Loopback,
@@ -370,6 +377,59 @@ async fn rpc_call(
         kind: "missing_result",
         message: "Fiber RPC response did not include result or error".to_string(),
         status: Some(status.as_u16()),
+    })
+}
+
+#[tauri::command]
+async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError> {
+    let endpoint = validate_endpoint(&endpoint)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|err| RpcClientError {
+            kind: "client_init",
+            message: err.to_string(),
+            status: None,
+        })?;
+    let body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "get_tip_block_number",
+        "params": [],
+    });
+    let response = client
+        .post(endpoint.clone())
+        .json(&body)
+        .send()
+        .await
+        .map_err(map_transport_error)?;
+    let status = response.status();
+
+    if !status.is_success() {
+        return Err(map_http_status(status));
+    }
+
+    let rpc_response = response
+        .json::<JsonRpcResponse>()
+        .await
+        .map_err(|err| RpcClientError {
+            kind: "malformed_response",
+            message: err.to_string(),
+            status: Some(status.as_u16()),
+        })?;
+
+    if let Some(error) = rpc_response.error {
+        return Err(RpcClientError {
+            kind: "json_rpc_error",
+            message: format!("CKB RPC error {}: {}", error.code, error.message),
+            status: Some(status.as_u16()),
+        });
+    }
+
+    Ok(CkbRpcHealth {
+        endpoint: endpoint.to_string(),
+        tip_block_number: rpc_response.result,
+        status: "ok".to_string(),
     })
 }
 
@@ -1477,6 +1537,7 @@ fn main() {
             secret_backend_status,
             rpc_allowed_methods,
             rpc_call,
+            ckb_rpc_health,
             mock_rpc_call,
             node_preflight,
             node_generate_config,
@@ -1554,6 +1615,15 @@ mod tests {
         let loopback = validate_endpoint("http://localhost:8227").unwrap();
 
         assert!(enforce_endpoint_auth(&loopback, None).is_ok());
+    }
+
+    #[test]
+    fn ckb_health_uses_validated_http_endpoint() {
+        assert!(validate_endpoint("https://testnet.ckbapp.dev/").is_ok());
+        assert_eq!(
+            validate_endpoint("file:///tmp/ckb.sock").unwrap_err().kind,
+            "invalid_endpoint"
+        );
     }
 
     #[test]

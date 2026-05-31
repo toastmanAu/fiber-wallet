@@ -1,8 +1,14 @@
+import { invoke } from "@tauri-apps/api/core";
 import { CheckCircle2, Plus, ServerCog, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { classifyRpcEndpoint } from "../../lib/endpointSafety";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
+
+type CkbRpcHealth = {
+  status: string;
+  tip_block_number?: unknown;
+};
 
 export function OnboardingPanel() {
   const profiles = useProfileStore((state) => state.profiles);
@@ -15,7 +21,9 @@ export function OnboardingPanel() {
   const setSessionBiscuitToken = useProfileStore((state) => state.setSessionBiscuitToken);
   const endpointSafety = activeProfile ? classifyRpcEndpoint(activeProfile.fiberRpcEndpoint) : null;
   const [healthStatus, setHealthStatus] = useState("");
+  const [ckbHealthStatus, setCkbHealthStatus] = useState("");
   const [isChecking, setIsChecking] = useState(false);
+  const [isCheckingCkb, setIsCheckingCkb] = useState(false);
   const [mainnetEnabled, setMainnetEnabled] = useState(false);
 
   async function checkRpcHealth() {
@@ -38,6 +46,26 @@ export function OnboardingPanel() {
       setHealthStatus(formatRpcError(error));
     } finally {
       setIsChecking(false);
+    }
+  }
+
+  async function checkCkbRpcHealth() {
+    if (!activeProfile) {
+      return;
+    }
+
+    setIsCheckingCkb(true);
+    setCkbHealthStatus("");
+
+    try {
+      const response = await invoke<CkbRpcHealth>("ckb_rpc_health", {
+        endpoint: activeProfile.ckbRpcEndpoint,
+      });
+      setCkbHealthStatus(`CKB RPC ${response.status} / tip ${String(response.tip_block_number ?? "unknown")}`);
+    } catch (error) {
+      setCkbHealthStatus(formatRpcError(error));
+    } finally {
+      setIsCheckingCkb(false);
     }
   }
 
@@ -141,6 +169,15 @@ export function OnboardingPanel() {
           </label>
 
           <label>
+            <span>CKB RPC endpoint</span>
+            <input
+              value={activeProfile.ckbRpcEndpoint}
+              onChange={(event) => updateActiveProfile({ ckbRpcEndpoint: event.target.value })}
+              placeholder="https://testnet.ckbapp.dev/"
+            />
+          </label>
+
+          <label>
             <span>Session Biscuit token</span>
             <input
               value={sessionBiscuitToken}
@@ -155,6 +192,13 @@ export function OnboardingPanel() {
               {isChecking ? "Checking" : "Test node_info"}
             </button>
             <span>{healthStatus || "No health check yet"}</span>
+          </div>
+
+          <div className="health-check-row">
+            <button className="command-button" type="button" onClick={checkCkbRpcHealth} disabled={isCheckingCkb}>
+              {isCheckingCkb ? "Checking" : "Test CKB RPC"}
+            </button>
+            <span>{ckbHealthStatus || "No CKB health check yet"}</span>
           </div>
         </form>
       ) : null}

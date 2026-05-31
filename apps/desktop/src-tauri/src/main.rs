@@ -186,6 +186,8 @@ struct WalletStatus {
     key_path: String,
     backup_exists: bool,
     backup_path: String,
+    bip39_backup_exists: bool,
+    bip39_backup_path: String,
 }
 
 #[derive(Deserialize)]
@@ -199,6 +201,14 @@ struct WalletImportInput {
 struct WalletBackupInput {
     data_dir: String,
     passphrase: String,
+}
+
+#[derive(Deserialize)]
+struct WalletBip39ImportInput {
+    data_dir: String,
+    mnemonic: String,
+    passphrase: String,
+    overwrite: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -611,12 +621,15 @@ fn node_read_config(config_path: String, max_chars: Option<usize>) -> Result<Str
 fn wallet_status(data_dir: String) -> WalletStatus {
     let key_path = wallet_key_path(&data_dir);
     let backup_path = wallet_backup_path(&data_dir);
+    let bip39_backup_path = wallet_bip39_backup_path(&data_dir);
 
     WalletStatus {
         key_exists: key_path.is_file(),
         key_path: key_path.display().to_string(),
         backup_exists: backup_path.is_file(),
         backup_path: backup_path.display().to_string(),
+        bip39_backup_exists: bip39_backup_path.is_file(),
+        bip39_backup_path: bip39_backup_path.display().to_string(),
     }
 }
 
@@ -722,6 +735,56 @@ fn wallet_restore_encrypted_backup(
     set_private_file_permissions(&key_path)?;
 
     Ok(wallet_status(input.data_dir))
+}
+
+#[tauri::command]
+fn wallet_import_bip39_mnemonic(input: WalletBip39ImportInput) -> Result<WalletStatus, WalletCommandError> {
+    require_passphrase(&input.passphrase)?;
+    let mnemonic = normalize_bip39_mnemonic(&input.mnemonic)?;
+    let backup_path = wallet_bip39_backup_path(&input.data_dir);
+
+    if backup_path.exists() && !input.overwrite {
+        return Err(WalletCommandError {
+            kind: "bip39_backup_exists",
+            message: "BIP39 encrypted backup already exists; enable overwrite to replace it".to_string(),
+        });
+    }
+
+    let envelope = encrypt_key_backup(mnemonic.as_bytes(), &input.passphrase)?;
+
+    if let Some(parent) = backup_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| WalletCommandError {
+            kind: "backup_parent_create_failed",
+            message: err.to_string(),
+        })?;
+    }
+
+    fs::write(
+        &backup_path,
+        serde_json::to_string_pretty(&envelope).map_err(|err| WalletCommandError {
+            kind: "backup_serialize_failed",
+            message: err.to_string(),
+        })?,
+    )
+    .map_err(|err| WalletCommandError {
+        kind: "backup_write_failed",
+        message: err.to_string(),
+    })?;
+    set_private_file_permissions(&backup_path)?;
+
+    Ok(wallet_status(input.data_dir))
+}
+
+#[tauri::command]
+fn wallet_validate_bip39_backup(input: WalletBackupInput) -> Result<bool, WalletCommandError> {
+    require_passphrase(&input.passphrase)?;
+    let envelope = read_bip39_backup_envelope(&input.data_dir)?;
+    let plaintext = decrypt_key_backup(&envelope, &input.passphrase)?;
+    let mnemonic = String::from_utf8(plaintext).map_err(|err| WalletCommandError {
+        kind: "bip39_decode_failed",
+        message: err.to_string(),
+    })?;
+    normalize_bip39_mnemonic(&mnemonic).map(|_| true)
 }
 
 #[tauri::command]
@@ -1093,6 +1156,12 @@ fn wallet_backup_path(data_dir: &str) -> PathBuf {
         .join("fiber-wallet-key-backup.json")
 }
 
+fn wallet_bip39_backup_path(data_dir: &str) -> PathBuf {
+    Path::new(data_dir)
+        .join("ckb")
+        .join("fiber-wallet-bip39-backup.json")
+}
+
 fn extract_private_key_line(contents: &str) -> Result<String, WalletCommandError> {
     let line = contents
         .lines()
@@ -1112,6 +1181,33 @@ fn extract_private_key_line(contents: &str) -> Result<String, WalletCommandError
     }
 
     Ok(line.to_string())
+}
+
+fn normalize_bip39_mnemonic(input: &str) -> Result<String, WalletCommandError> {
+    let words = input
+        .split_whitespace()
+        .map(|word| word.trim().to_ascii_lowercase())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+
+    if !matches!(words.len(), 12 | 15 | 18 | 21 | 24) {
+        return Err(WalletCommandError {
+            kind: "invalid_bip39_word_count",
+            message: "BIP39 mnemonic must contain 12, 15, 18, 21, or 24 words".to_string(),
+        });
+    }
+
+    if words
+        .iter()
+        .any(|word| !word.chars().all(|character| character.is_ascii_lowercase()))
+    {
+        return Err(WalletCommandError {
+            kind: "invalid_bip39_word",
+            message: "BIP39 mnemonic words must be alphabetic ASCII words".to_string(),
+        });
+    }
+
+    Ok(words.join(" "))
 }
 
 fn require_passphrase(passphrase: &str) -> Result<(), WalletCommandError> {
@@ -1213,6 +1309,20 @@ fn read_backup_envelope(data_dir: &str) -> Result<WalletBackupEnvelope, WalletCo
         message: err.to_string(),
     })
 }
+
+fn read_bip39_backup_envelope(data_dir: &str) -> Result<WalletBackupEnvelope, WalletCommandError> {
+    let backup_path = wallet_bip39_backup_path(data_dir);
+    let contents = fs::read_to_string(&backup_path).map_err(|err| WalletCommandError {
+        kind: "backup_read_failed",
+        message: err.to_string(),
+    })?;
+
+    serde_json::from_str(&contents).map_err(|err| WalletCommandError {
+        kind: "backup_parse_failed",
+        message: err.to_string(),
+    })
+}
+
 
 fn hex_encode(bytes: &[u8]) -> String {
     bytes
@@ -1381,6 +1491,8 @@ fn main() {
             wallet_export_encrypted_backup,
             wallet_validate_backup,
             wallet_restore_encrypted_backup,
+            wallet_import_bip39_mnemonic,
+            wallet_validate_bip39_backup,
             biscuit_generate_keypair,
             biscuit_import_private_key,
             biscuit_templates,
@@ -1495,6 +1607,31 @@ mod tests {
 
         assert_eq!(decrypted, plaintext);
         assert!(decrypt_key_backup(&envelope, "wrong backup passphrase").is_err());
+    }
+
+    #[test]
+    fn bip39_import_encrypts_and_validates_backup() {
+        let data_dir = std::env::temp_dir().join(format!("fiber-wallet-bip39-test-{}", now_ms()));
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let passphrase = "strong backup passphrase";
+
+        let status = wallet_import_bip39_mnemonic(WalletBip39ImportInput {
+            data_dir: data_dir.display().to_string(),
+            mnemonic: mnemonic.to_string(),
+            passphrase: passphrase.to_string(),
+            overwrite: false,
+        })
+        .unwrap();
+
+        assert!(status.bip39_backup_exists);
+        let backup_contents = fs::read_to_string(status.bip39_backup_path).unwrap();
+        assert!(!backup_contents.contains("abandon"));
+        assert!(wallet_validate_bip39_backup(WalletBackupInput {
+            data_dir: data_dir.display().to_string(),
+            passphrase: passphrase.to_string(),
+        })
+        .unwrap());
+        let _ = fs::remove_dir_all(data_dir);
     }
 
     #[test]

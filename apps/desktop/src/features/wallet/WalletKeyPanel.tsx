@@ -9,6 +9,8 @@ type WalletStatus = {
   key_path: string;
   backup_exists: boolean;
   backup_path: string;
+  bip39_backup_exists: boolean;
+  bip39_backup_path: string;
 };
 
 type WalletCommandError = {
@@ -21,6 +23,7 @@ export function WalletKeyPanel() {
     state.profiles.find((profile) => profile.id === state.activeProfileId),
   );
   const [exportedKeyContents, setExportedKeyContents] = useState("");
+  const [bip39Mnemonic, setBip39Mnemonic] = useState("");
   const [backupPassphrase, setBackupPassphrase] = useState("");
   const [overwrite, setOverwrite] = useState(false);
   const [status, setStatus] = useState("No wallet action yet");
@@ -85,6 +88,18 @@ export function WalletKeyPanel() {
           />
         </label>
 
+        <label>
+          <span>BIP39 mnemonic import</span>
+          <textarea
+            className="secret-textarea"
+            value={bip39Mnemonic}
+            onChange={(event) => setBip39Mnemonic(event.target.value)}
+            placeholder="12, 15, 18, 21, or 24 words. Stored only as an encrypted backup."
+            rows={4}
+            spellCheck={false}
+          />
+        </label>
+
         <div className="node-actions">
           <ConfirmActionButton
             confirmLabel="Import Key"
@@ -139,6 +154,36 @@ export function WalletKeyPanel() {
             }
           />
 
+          <ConfirmActionButton
+            confirmLabel="Import BIP39"
+            disabled={isBusy}
+            icon={<KeyRound size={16} aria-hidden="true" />}
+            items={[
+              { label: "Data directory", value: activeProfile.dataDir || "not set" },
+              { label: "Overwrite", value: overwrite ? "yes" : "no" },
+              { label: "Mnemonic", value: bip39Mnemonic.trim() ? `${bip39Mnemonic.trim().split(/\s+/).length} words` : "not provided" },
+              { label: "Passphrase", value: backupPassphrase ? "provided" : "not provided" },
+            ]}
+            label="Import BIP39"
+            title="Confirm BIP39 Import"
+            warning="BIP39 recovery material is encrypted into a backup file and the plaintext phrase is cleared after import."
+            onConfirm={() =>
+              run(async () => {
+                const walletStatus = await invoke<WalletStatus>("wallet_import_bip39_mnemonic", {
+                  input: {
+                    data_dir: activeProfile.dataDir,
+                    mnemonic: bip39Mnemonic,
+                    passphrase: backupPassphrase,
+                    overwrite,
+                  },
+                });
+                setBip39Mnemonic("");
+                setDetails(JSON.stringify(walletStatus, null, 2));
+                return "Imported encrypted BIP39 backup";
+              })
+            }
+          />
+
           <button
             className="command-button"
             disabled={isBusy}
@@ -157,6 +202,26 @@ export function WalletKeyPanel() {
           >
             <ShieldCheck size={16} aria-hidden="true" />
             <span>Validate</span>
+          </button>
+
+          <button
+            className="command-button"
+            disabled={isBusy}
+            type="button"
+            onClick={() =>
+              run(async () => {
+                const valid = await invoke<boolean>("wallet_validate_bip39_backup", {
+                  input: {
+                    data_dir: activeProfile.dataDir,
+                    passphrase: backupPassphrase,
+                  },
+                });
+                return valid ? "BIP39 backup validated" : "BIP39 backup validation failed";
+              })
+            }
+          >
+            <ShieldCheck size={16} aria-hidden="true" />
+            <span>Validate BIP39</span>
           </button>
 
           <ConfirmActionButton

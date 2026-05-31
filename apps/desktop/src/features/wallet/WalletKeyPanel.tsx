@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Download, KeyRound, RotateCcw, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { useProfileStore } from "../../lib/profileStore";
 
 type WalletStatus = {
@@ -85,11 +86,19 @@ export function WalletKeyPanel() {
         </label>
 
         <div className="node-actions">
-          <button
-            className="command-button"
+          <ConfirmActionButton
+            confirmLabel="Import Key"
             disabled={isBusy}
-            type="button"
-            onClick={() =>
+            icon={<KeyRound size={16} aria-hidden="true" />}
+            items={[
+              { label: "Data directory", value: activeProfile.dataDir || "not set" },
+              { label: "Overwrite", value: overwrite ? "yes" : "no" },
+              { label: "Key material", value: exportedKeyContents.trim() ? "provided" : "not provided" },
+            ]}
+            label="Import Key"
+            title="Confirm Key Import"
+            warning="Import writes funding key material to ckb/key for the active profile."
+            onConfirm={() =>
               run(async () => {
                 const walletStatus = await invoke<WalletStatus>("wallet_import_ckb_key", {
                   input: {
@@ -103,16 +112,21 @@ export function WalletKeyPanel() {
                 return "Imported funding key";
               })
             }
-          >
-            <KeyRound size={16} aria-hidden="true" />
-            <span>Import Key</span>
-          </button>
+          />
 
-          <button
-            className="command-button"
+          <ConfirmActionButton
+            confirmLabel="Export Backup"
             disabled={isBusy}
-            type="button"
-            onClick={() =>
+            icon={<Download size={16} aria-hidden="true" />}
+            items={[
+              { label: "Data directory", value: activeProfile.dataDir || "not set" },
+              { label: "Backup path", value: "ckb/fiber-wallet-key-backup.json" },
+              { label: "Passphrase", value: backupPassphrase ? "provided" : "not provided" },
+            ]}
+            label="Backup"
+            title="Confirm Encrypted Backup"
+            warning="Backup exports encrypted funding key material. Keep the passphrase separate from the backup file."
+            onConfirm={() =>
               run(async () => {
                 const path = await invoke<string>("wallet_export_encrypted_backup", {
                   input: {
@@ -123,10 +137,7 @@ export function WalletKeyPanel() {
                 return `Exported encrypted backup: ${path}`;
               })
             }
-          >
-            <Download size={16} aria-hidden="true" />
-            <span>Backup</span>
-          </button>
+          />
 
           <button
             className="command-button"
@@ -148,11 +159,19 @@ export function WalletKeyPanel() {
             <span>Validate</span>
           </button>
 
-          <button
-            className="command-button"
+          <ConfirmActionButton
+            confirmLabel="Restore Backup"
             disabled={isBusy}
-            type="button"
-            onClick={() =>
+            icon={<RotateCcw size={16} aria-hidden="true" />}
+            items={[
+              { label: "Data directory", value: activeProfile.dataDir || "not set" },
+              { label: "Overwrite", value: overwrite ? "yes" : "no" },
+              { label: "Passphrase", value: backupPassphrase ? "provided" : "not provided" },
+            ]}
+            label="Restore"
+            title="Confirm Backup Restore"
+            warning="Restore writes funding key material back to ckb/key and can replace the current key when overwrite is enabled."
+            onConfirm={() =>
               run(async () => {
                 const walletStatus = await invoke<WalletStatus>("wallet_restore_encrypted_backup", {
                   input: {
@@ -165,10 +184,7 @@ export function WalletKeyPanel() {
                 return "Restored encrypted backup";
               })
             }
-          >
-            <RotateCcw size={16} aria-hidden="true" />
-            <span>Restore</span>
-          </button>
+          />
         </div>
 
         <div className="node-status">

@@ -44,6 +44,43 @@ describe("mockFiberRpc", () => {
     });
   });
 
+  it("tracks mock invoice and payment flow", async () => {
+    const invoice = await mockFiberRpc("new_invoice", {
+      amount: "100000000",
+      currency: "Fibt",
+      description: "test invoice",
+    });
+    expect(invoice).toMatchObject({
+      invoice_address: expect.stringContaining("fibt1mock"),
+      invoice: {
+        amount: "100000000",
+        currency: "Fibt",
+      },
+      status: "Open",
+    });
+
+    const invoiceAddress = (invoice as { invoice_address: string }).invoice_address;
+    const preview = await mockFiberRpc("send_payment", {
+      invoice: invoiceAddress,
+      dry_run: true,
+    });
+    expect(preview).toMatchObject({
+      status: "Success",
+      dry_run: true,
+    });
+
+    const sent = await mockFiberRpc("send_payment", {
+      invoice: invoiceAddress,
+    });
+    expect(sent).toMatchObject({
+      status: "Success",
+      invoice: invoiceAddress,
+    });
+    await expect(mockFiberRpc("list_payments")).resolves.toMatchObject({
+      payments: [{ invoice: invoiceAddress }],
+    });
+  });
+
   it("rejects unknown methods", async () => {
     await expect(mockFiberRpc("unknown_method")).rejects.toThrow("not implemented");
   });

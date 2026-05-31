@@ -6,6 +6,7 @@ import {
   KeyRound,
   Network,
   RadioTower,
+  ReceiptText,
   Settings,
   Shield,
   TerminalSquare,
@@ -15,13 +16,24 @@ import { AuthVaultPanel } from "./features/auth/AuthVaultPanel";
 import { ChannelsPanel } from "./features/channels/ChannelsPanel";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
+import { PaymentsPanel } from "./features/payments/PaymentsPanel";
 import { PeersPanel } from "./features/peers/PeersPanel";
 import { NodeManagerPanel } from "./features/settings/NodeManagerPanel";
 import { JsonRpcConsole } from "./features/terminal/JsonRpcConsole";
 import { WalletKeyPanel } from "./features/wallet/WalletKeyPanel";
 import { useProfileStore } from "./lib/profileStore";
 
-type NavId = "dashboard" | "profiles" | "wallet" | "auth" | "peers" | "channels" | "graph" | "terminal" | "settings";
+type NavId =
+  | "dashboard"
+  | "profiles"
+  | "wallet"
+  | "auth"
+  | "peers"
+  | "channels"
+  | "payments"
+  | "graph"
+  | "terminal"
+  | "settings";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Activity },
@@ -30,6 +42,7 @@ const navItems = [
   { id: "auth", label: "Auth Vault", icon: Shield },
   { id: "peers", label: "Peers", icon: RadioTower },
   { id: "channels", label: "Channels", icon: Cable },
+  { id: "payments", label: "Payments", icon: ReceiptText },
   { id: "graph", label: "Graph", icon: Network },
   { id: "terminal", label: "Terminal", icon: TerminalSquare },
   { id: "settings", label: "Settings", icon: Settings },
@@ -89,6 +102,7 @@ export default function App() {
         {activeView === "auth" ? <AuthVaultPanel /> : null}
         {activeView === "peers" ? <PeersPanel /> : null}
         {activeView === "channels" ? <ChannelsPanel /> : null}
+        {activeView === "payments" ? <PaymentsPanel /> : null}
         {activeView === "dashboard" || activeView === "profiles" ? (
           <section className="content-grid">
             <Dashboard />
@@ -102,7 +116,8 @@ export default function App() {
         activeView !== "wallet" &&
         activeView !== "auth" &&
         activeView !== "peers" &&
-        activeView !== "channels" ? (
+        activeView !== "channels" &&
+        activeView !== "payments" ? (
           <section className="placeholder-panel">
             <h2>{activeNav.label}</h2>
             <p>This section is queued behind the RPC connectivity slice.</p>

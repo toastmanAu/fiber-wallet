@@ -7,4 +7,7 @@ export const queryKeys = {
   channelsRoot: () => ["fiber-rpc", "list_channels"] as const,
   channels: (profileId?: string, rpcMode?: string, endpoint?: string, filters?: string) =>
     ["fiber-rpc", "list_channels", profileId, rpcMode, endpoint, filters] as const,
+  paymentsRoot: () => ["fiber-rpc", "list_payments"] as const,
+  payments: (profileId?: string, rpcMode?: string, endpoint?: string, filters?: string) =>
+    ["fiber-rpc", "list_payments", profileId, rpcMode, endpoint, filters] as const,
 };

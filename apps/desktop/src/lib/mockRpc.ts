@@ -13,8 +13,35 @@ type MockChannel = {
   public: boolean;
 };
 
+type MockInvoice = {
+  invoice_address: string;
+  invoice: {
+    amount: string;
+    currency: string;
+    description?: string;
+    payment_hash: string;
+  };
+  status: string;
+};
+
+type MockPayment = {
+  payment_hash: string;
+  status: string;
+  created_at: number;
+  last_updated_at: number;
+  failed_error: string | null;
+  fee: string;
+  routers: unknown[];
+  invoice?: string;
+  target_pubkey?: string;
+  amount?: string;
+  dry_run?: boolean;
+};
+
 const mockPeers: MockPeer[] = [];
 const mockChannels: MockChannel[] = [];
+const mockInvoices: MockInvoice[] = [];
+const mockPayments: MockPayment[] = [];
 
 const fixtures: Record<string, MockRpcValue> = {
   node_info: {
@@ -111,6 +138,112 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
     return {};
   }
 
+  if (method === "new_invoice") {
+    const input = objectParams(params);
+    const amount = stringParam(input.amount) ?? "0";
+    const currency = stringParam(input.currency) ?? "Fibt";
+    const paymentHash = `0x${(mockInvoices.length + 1).toString(16).padStart(64, "1")}`;
+    const invoice = {
+      invoice_address: `${currency.toLowerCase()}1mock${mockInvoices.length + 1}`,
+      invoice: {
+        amount,
+        currency,
+        description: stringParam(input.description),
+        payment_hash: paymentHash,
+      },
+      status: "Open",
+    };
+    mockInvoices.push(invoice);
+    return structuredClone(invoice);
+  }
+
+  if (method === "parse_invoice") {
+    const invoiceAddress = stringParam(objectParams(params).invoice) ?? "";
+    const invoice = mockInvoices.find((item) => item.invoice_address === invoiceAddress);
+
+    return {
+      invoice: structuredClone(
+        invoice?.invoice ?? {
+          amount: "0",
+          currency: invoiceAddress.slice(0, 4) || "Fibt",
+          payment_hash: `0x${"0".repeat(64)}`,
+        },
+      ),
+    };
+  }
+
+  if (method === "get_invoice" || method === "cancel_invoice") {
+    const paymentHash = stringParam(objectParams(params).payment_hash);
+    const invoice = mockInvoices.find((item) => item.invoice.payment_hash === paymentHash);
+    if (!invoice) {
+      throw new Error("mock RPC invoice not found");
+    }
+
+    if (method === "cancel_invoice") {
+      invoice.status = "Canceled";
+    }
+
+    return structuredClone(invoice);
+  }
+
+  if (method === "send_payment") {
+    const input = objectParams(params);
+    const dryRun = input.dry_run === true;
+    const invoiceAddress = stringParam(input.invoice);
+    const invoice = invoiceAddress ? mockInvoices.find((item) => item.invoice_address === invoiceAddress) : undefined;
+    const paymentHash = invoice?.invoice.payment_hash ?? `0x${(mockPayments.length + 1).toString(16).padStart(64, "2")}`;
+    const now = Date.now();
+    const payment: MockPayment = {
+      payment_hash: paymentHash,
+      status: "Success",
+      created_at: now,
+      last_updated_at: now,
+      failed_error: null,
+      fee: dryRun ? "1000" : "2000",
+      routers: [],
+      invoice: invoiceAddress,
+      target_pubkey: stringParam(input.target_pubkey),
+      amount: stringParam(input.amount) ?? invoice?.invoice.amount,
+      dry_run: dryRun,
+    };
+
+    if (!dryRun) {
+      mockPayments.unshift(payment);
+    }
+
+    return structuredClone(payment);
+  }
+
+  if (method === "get_payment") {
+    const paymentHash = stringParam(objectParams(params).payment_hash);
+    const payment = mockPayments.find((item) => item.payment_hash === paymentHash);
+    if (!payment) {
+      throw new Error("mock RPC payment not found");
+    }
+
+    return structuredClone(payment);
+  }
+
+  if (method === "list_payments") {
+    const input = objectParams(params);
+    const status = stringParam(input.status);
+    const limit = numberParam(input.limit) ?? 15;
+    const payments = mockPayments
+      .filter((payment) => !status || payment.status === status)
+      .slice(0, limit);
+
+    return {
+      payments: structuredClone(payments),
+      last_cursor: payments.at(-1)?.payment_hash ?? null,
+    };
+  }
+
+  if (method === "build_router") {
+    return {
+      router_hops: [],
+    };
+  }
+
   const fixture = fixtures[method];
 
   if (!fixture) {
@@ -130,7 +263,24 @@ function objectParams(params: unknown[] | Record<string, unknown>): Record<strin
 }
 
 function stringParam(value: unknown): string | undefined {
+  if (typeof value === "number" || typeof value === "bigint") {
+    return value.toString();
+  }
+
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberParam(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
 }
 
 function pubkeyFromAddress(address: string | undefined): string {

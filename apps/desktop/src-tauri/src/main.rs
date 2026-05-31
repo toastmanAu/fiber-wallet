@@ -109,6 +109,11 @@ struct CkbRpcHealth {
     endpoint: String,
     tip_block_number: Option<Value>,
     status: String,
+    indexer_status: String,
+    indexer_tip_block_number: Option<Value>,
+    indexer_tip_block_hash: Option<Value>,
+    indexer_lag_blocks: Option<i64>,
+    indexer_message: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -380,21 +385,15 @@ async fn rpc_call(
     })
 }
 
-#[tauri::command]
-async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError> {
-    let endpoint = validate_endpoint(&endpoint)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|err| RpcClientError {
-            kind: "client_init",
-            message: err.to_string(),
-            status: None,
-        })?;
+async fn ckb_rpc_call(
+    client: &reqwest::Client,
+    endpoint: &Url,
+    method: &str,
+) -> Result<Value, RpcClientError> {
     let body = json!({
         "jsonrpc": "2.0",
         "id": 1,
-        "method": "get_tip_block_number",
+        "method": method,
         "params": [],
     });
     let response = client
@@ -426,10 +425,93 @@ async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError
         });
     }
 
+    rpc_response.result.ok_or_else(|| RpcClientError {
+        kind: "missing_result",
+        message: "CKB RPC response did not include result or error".to_string(),
+        status: Some(status.as_u16()),
+    })
+}
+
+fn parse_ckb_block_number(value: &Value) -> Option<i64> {
+    match value {
+        Value::String(hex) => {
+            let trimmed = hex.strip_prefix("0x").unwrap_or(hex);
+            i64::from_str_radix(trimmed, 16).ok()
+        }
+        Value::Number(n) => n.as_i64(),
+        _ => None,
+    }
+}
+
+fn compute_indexer_lag(chain_tip: &Value, indexer_tip: &Value) -> Option<i64> {
+    let chain = parse_ckb_block_number(chain_tip)?;
+    let indexer = parse_ckb_block_number(indexer_tip)?;
+    Some(chain - indexer)
+}
+
+#[tauri::command]
+async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError> {
+    let endpoint = validate_endpoint(&endpoint)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|err| RpcClientError {
+            kind: "client_init",
+            message: err.to_string(),
+            status: None,
+        })?;
+
+    let tip_block_number = ckb_rpc_call(&client, &endpoint, "get_tip_block_number").await?;
+
+    let (
+        indexer_status,
+        indexer_tip_block_number,
+        indexer_tip_block_hash,
+        indexer_lag_blocks,
+        indexer_message,
+    ) = match ckb_rpc_call(&client, &endpoint, "get_indexer_tip").await {
+        Ok(Value::Object(indexer_tip)) => {
+            let number = indexer_tip.get("block_number").cloned();
+            let hash = indexer_tip.get("block_hash").cloned();
+            let lag = number
+                .as_ref()
+                .and_then(|indexer| compute_indexer_lag(&tip_block_number, indexer));
+            (
+                "ok".to_string(),
+                number,
+                hash,
+                lag,
+                None,
+            )
+        }
+        Ok(_) => (
+            "unavailable".to_string(),
+            None,
+            None,
+            None,
+            Some("CKB indexer returned an unexpected response shape".to_string()),
+        ),
+        Err(err) => (
+            "unavailable".to_string(),
+            None,
+            None,
+            None,
+            Some(format!(
+                "CKB indexer not reachable on this endpoint ({}): {}. Wallet balance queries require the indexer module.",
+                err.kind, err.message
+            )),
+        ),
+    };
+
     Ok(CkbRpcHealth {
         endpoint: endpoint.to_string(),
-        tip_block_number: rpc_response.result,
+        tip_block_number: Some(tip_block_number),
         status: "ok".to_string(),
+        indexer_status,
+        indexer_tip_block_number,
+        indexer_tip_block_hash,
+        indexer_lag_blocks,
+        indexer_message,
     })
 }
 
@@ -1624,6 +1706,33 @@ mod tests {
             validate_endpoint("file:///tmp/ckb.sock").unwrap_err().kind,
             "invalid_endpoint"
         );
+    }
+
+    #[test]
+    fn ckb_block_number_parses_hex_and_decimal() {
+        assert_eq!(parse_ckb_block_number(&json!("0x10")), Some(16));
+        assert_eq!(parse_ckb_block_number(&json!("0xabcdef")), Some(11_259_375));
+        assert_eq!(parse_ckb_block_number(&json!("0")), Some(0));
+        assert_eq!(parse_ckb_block_number(&json!(42)), Some(42));
+        assert_eq!(parse_ckb_block_number(&json!(null)), None);
+        assert_eq!(parse_ckb_block_number(&json!("not-a-number")), None);
+    }
+
+    #[test]
+    fn indexer_lag_is_positive_when_indexer_trails_chain() {
+        assert_eq!(
+            compute_indexer_lag(&json!("0x100"), &json!("0xf0")),
+            Some(16)
+        );
+        assert_eq!(compute_indexer_lag(&json!("0x10"), &json!("0x10")), Some(0));
+        assert_eq!(compute_indexer_lag(&json!(null), &json!("0x10")), None);
+    }
+
+    #[test]
+    fn indexer_lag_is_negative_when_indexer_ahead() {
+        // Should never happen in practice, but the math should still surface it
+        // rather than silently clamp — the UI decides how to present the anomaly.
+        assert_eq!(compute_indexer_lag(&json!("0xf0"), &json!("0x100")), Some(-16));
     }
 
     #[test]

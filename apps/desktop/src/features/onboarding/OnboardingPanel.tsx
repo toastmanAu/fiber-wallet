@@ -8,7 +8,14 @@ import { useProfileStore } from "../../lib/profileStore";
 type CkbRpcHealth = {
   status: string;
   tip_block_number?: unknown;
+  indexer_status: "ok" | "unavailable" | string;
+  indexer_tip_block_number?: unknown;
+  indexer_tip_block_hash?: unknown;
+  indexer_lag_blocks?: number | null;
+  indexer_message?: string | null;
 };
+
+const STALE_INDEXER_LAG_BLOCKS = 16;
 
 export function OnboardingPanel() {
   const profiles = useProfileStore((state) => state.profiles);
@@ -22,6 +29,7 @@ export function OnboardingPanel() {
   const endpointSafety = activeProfile ? classifyRpcEndpoint(activeProfile.fiberRpcEndpoint) : null;
   const [healthStatus, setHealthStatus] = useState("");
   const [ckbHealthStatus, setCkbHealthStatus] = useState("");
+  const [ckbIndexerWarning, setCkbIndexerWarning] = useState("");
   const [isChecking, setIsChecking] = useState(false);
   const [isCheckingCkb, setIsCheckingCkb] = useState(false);
   const [mainnetEnabled, setMainnetEnabled] = useState(false);
@@ -56,12 +64,29 @@ export function OnboardingPanel() {
 
     setIsCheckingCkb(true);
     setCkbHealthStatus("");
+    setCkbIndexerWarning("");
 
     try {
       const response = await invoke<CkbRpcHealth>("ckb_rpc_health", {
         endpoint: activeProfile.ckbRpcEndpoint,
       });
-      setCkbHealthStatus(`CKB RPC ${response.status} / tip ${String(response.tip_block_number ?? "unknown")}`);
+      const tip = String(response.tip_block_number ?? "unknown");
+      const indexerSummary = formatIndexerSummary(response);
+      setCkbHealthStatus(`CKB RPC ${response.status} / tip ${tip} / ${indexerSummary}`);
+
+      if (response.indexer_status !== "ok") {
+        setCkbIndexerWarning(
+          response.indexer_message ??
+            "CKB indexer is unavailable on this endpoint. Wallet balance queries and cell lookups will not work until you connect to an endpoint with the indexer module enabled.",
+        );
+      } else if (
+        typeof response.indexer_lag_blocks === "number" &&
+        response.indexer_lag_blocks > STALE_INDEXER_LAG_BLOCKS
+      ) {
+        setCkbIndexerWarning(
+          `Indexer is ${response.indexer_lag_blocks} blocks behind chain tip. Wallet balances may be stale until it catches up.`,
+        );
+      }
     } catch (error) {
       setCkbHealthStatus(formatRpcError(error));
     } finally {
@@ -200,10 +225,30 @@ export function OnboardingPanel() {
             </button>
             <span>{ckbHealthStatus || "No CKB health check yet"}</span>
           </div>
+
+          {ckbIndexerWarning ? (
+            <div className="safety-banner danger">
+              <ShieldAlert size={17} aria-hidden="true" />
+              <span>{ckbIndexerWarning}</span>
+            </div>
+          ) : null}
         </form>
       ) : null}
     </section>
   );
+}
+
+function formatIndexerSummary(health: CkbRpcHealth): string {
+  if (health.indexer_status !== "ok") {
+    return `indexer ${health.indexer_status}`;
+  }
+
+  const tip = String(health.indexer_tip_block_number ?? "unknown");
+  if (typeof health.indexer_lag_blocks === "number") {
+    return `indexer ok / tip ${tip} / lag ${health.indexer_lag_blocks}`;
+  }
+
+  return `indexer ok / tip ${tip}`;
 }
 
 function shorten(value: string): string {

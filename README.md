@@ -4,6 +4,10 @@ Desktop control panel and wallet for Fiber Network Node.
 
 This repository is starting with Milestone 1 from `docs/project-plan.md`: a Tauri 2 + React + TypeScript desktop skeleton with profile state, mock RPC fixtures, and baseline tests.
 
+## Status
+
+Phase 1 is complete. See `docs/phase-1-writeup.md` for the implementation summary, validation notes, and next milestone gates.
+
 ## Development
 
 ```bash
@@ -24,4 +28,3 @@ The full desktop runtime uses Tauri:
 ```bash
 npm run tauri:dev
 ```
-

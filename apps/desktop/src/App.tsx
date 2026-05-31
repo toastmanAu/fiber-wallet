@@ -10,9 +10,13 @@ import {
   Shield,
   TerminalSquare,
 } from "lucide-react";
+import { useState } from "react";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
+import { JsonRpcConsole } from "./features/terminal/JsonRpcConsole";
 import { useProfileStore } from "./lib/profileStore";
+
+type NavId = "dashboard" | "profiles" | "wallet" | "auth" | "peers" | "channels" | "graph" | "terminal" | "settings";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Activity },
@@ -27,9 +31,11 @@ const navItems = [
 ];
 
 export default function App() {
+  const [activeView, setActiveView] = useState<NavId>("dashboard");
   const activeProfileId = useProfileStore((state) => state.activeProfileId);
   const profiles = useProfileStore((state) => state.profiles);
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId);
+  const activeNav = navItems.find((item) => item.id === activeView) ?? navItems[0];
 
   return (
     <div className="app-shell">
@@ -44,9 +50,14 @@ export default function App() {
         <nav>
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isCurrent = item.id === "dashboard";
+            const isCurrent = item.id === activeView;
             return (
-              <button className={isCurrent ? "nav-item active" : "nav-item"} key={item.id} type="button">
+              <button
+                className={isCurrent ? "nav-item active" : "nav-item"}
+                key={item.id}
+                type="button"
+                onClick={() => setActiveView(item.id as NavId)}
+              >
                 <Icon size={18} aria-hidden="true" />
                 <span>{item.label}</span>
               </button>
@@ -58,21 +69,29 @@ export default function App() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <h1>Dashboard</h1>
+            <h1>{activeNav.label}</h1>
             <p>{activeProfile ? activeProfile.name : "Create a profile to begin"}</p>
           </div>
           <div className="status-pill">
             <span className="status-dot" aria-hidden="true" />
-            Mock RPC
+            {activeProfile?.rpcMode === "live" ? "Live RPC" : "Mock RPC"}
           </div>
         </header>
 
-        <section className="content-grid">
-          <Dashboard />
-          <OnboardingPanel />
-        </section>
+        {activeView === "terminal" ? <JsonRpcConsole /> : null}
+        {activeView === "dashboard" || activeView === "profiles" ? (
+          <section className="content-grid">
+            <Dashboard />
+            <OnboardingPanel />
+          </section>
+        ) : null}
+        {activeView !== "dashboard" && activeView !== "profiles" && activeView !== "terminal" ? (
+          <section className="placeholder-panel">
+            <h2>{activeNav.label}</h2>
+            <p>This section is queued behind the RPC connectivity slice.</p>
+          </section>
+        ) : null}
       </main>
     </div>
   );
 }
-

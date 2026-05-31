@@ -146,11 +146,22 @@ h2 {
 }
 
 .dashboard-panel,
-.setup-panel {
+.setup-panel,
+.console-panel,
+.placeholder-panel {
   border: 1px solid rgba(142, 175, 166, 0.22);
   border-radius: 8px;
   background: rgba(12, 18, 19, 0.82);
   padding: 18px;
+}
+
+.placeholder-panel {
+  min-height: 220px;
+}
+
+.placeholder-panel p {
+  color: #8fa9a1;
+  margin-top: 8px;
 }
 
 .section-heading {
@@ -197,6 +208,25 @@ h2 {
   border-color: rgba(0, 224, 168, 0.28);
   border-radius: 8px;
   background: rgba(0, 224, 168, 0.08);
+}
+
+.command-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid rgba(0, 224, 168, 0.35);
+  border-radius: 8px;
+  background: rgba(0, 224, 168, 0.1);
+  color: #c8fff0;
+  cursor: pointer;
+  padding: 0 12px;
+}
+
+.command-button:disabled {
+  cursor: progress;
+  opacity: 0.65;
 }
 
 .profile-list {
@@ -262,6 +292,62 @@ h2 {
   outline-offset: 1px;
 }
 
+.console-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+}
+
+.console-grid label,
+.console-field {
+  display: grid;
+  gap: 7px;
+  color: #b8cbc5;
+  font-size: 13px;
+}
+
+.console-field {
+  margin-top: 14px;
+}
+
+.console-grid input,
+.console-grid select,
+.console-field textarea {
+  width: 100%;
+  border: 1px solid rgba(142, 175, 166, 0.26);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.74);
+  color: #eff7f3;
+  padding: 10px;
+}
+
+.console-grid input,
+.console-grid select {
+  min-height: 38px;
+}
+
+.console-field textarea {
+  min-height: 180px;
+  resize: vertical;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.console-output {
+  min-height: 220px;
+  max-height: 420px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid rgba(241, 64, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.74);
+  color: #d9fff5;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -277,7 +363,8 @@ h2 {
   }
 
   .content-grid,
-  .metrics-grid {
+  .metrics-grid,
+  .console-grid {
     grid-template-columns: 1fr;
   }
 }

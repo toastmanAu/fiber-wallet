@@ -24,6 +24,12 @@ type MockInvoice = {
     currency: string;
     description?: string;
     payment_hash: string;
+    payment_preimage?: string;
+    fallback_address?: string;
+    final_expiry_delta?: string;
+    udt_type_script?: unknown;
+    allow_mpp?: boolean;
+    allow_trampoline_routing?: boolean;
   };
   status: string;
 };
@@ -275,7 +281,13 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
         amount,
         currency,
         description: stringParam(input.description),
-        payment_hash: paymentHash,
+        payment_hash: stringParam(input.payment_hash) ?? paymentHash,
+        payment_preimage: stringParam(input.payment_preimage),
+        fallback_address: stringParam(input.fallback_address),
+        final_expiry_delta: stringParam(input.final_expiry_delta),
+        udt_type_script: input.udt_type_script,
+        allow_mpp: input.allow_mpp === true ? true : undefined,
+        allow_trampoline_routing: input.allow_trampoline_routing === true ? true : undefined,
       },
       status: "Open",
     };

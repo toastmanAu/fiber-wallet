@@ -46,6 +46,13 @@ export function PaymentsPanel() {
   const [invoiceCurrency, setInvoiceCurrency] = useState(activeProfile?.network === "mainnet" ? "Fibb" : "Fibt");
   const [invoiceDescription, setInvoiceDescription] = useState("");
   const [invoiceExpiry, setInvoiceExpiry] = useState("3600");
+  const [invoicePaymentPreimage, setInvoicePaymentPreimage] = useState("");
+  const [invoicePaymentHash, setInvoicePaymentHash] = useState("");
+  const [invoiceFallbackAddress, setInvoiceFallbackAddress] = useState("");
+  const [invoiceFinalExpiryDelta, setInvoiceFinalExpiryDelta] = useState("");
+  const [invoiceUdtTypeScript, setInvoiceUdtTypeScript] = useState("");
+  const [invoiceAllowMpp, setInvoiceAllowMpp] = useState(false);
+  const [invoiceAllowTrampoline, setInvoiceAllowTrampoline] = useState(false);
   const [invoiceText, setInvoiceText] = useState("");
   const [paymentHash, setPaymentHash] = useState("");
   const [targetPubkey, setTargetPubkey] = useState("");
@@ -211,6 +218,67 @@ export function PaymentsPanel() {
               <span>Expiry seconds</span>
               <input value={invoiceExpiry} onChange={(event) => setInvoiceExpiry(event.target.value)} />
             </label>
+            <h2>Advanced Invoice</h2>
+            <div className="settings-row">
+              <label>
+                <span>Payment preimage</span>
+                <input
+                  value={invoicePaymentPreimage}
+                  onChange={(event) => setInvoicePaymentPreimage(event.target.value)}
+                  placeholder="0x... optional"
+                />
+              </label>
+              <label>
+                <span>Payment hash</span>
+                <input
+                  value={invoicePaymentHash}
+                  onChange={(event) => setInvoicePaymentHash(event.target.value)}
+                  placeholder="0x... optional"
+                />
+              </label>
+            </div>
+            <div className="settings-row">
+              <label>
+                <span>Fallback address</span>
+                <input
+                  value={invoiceFallbackAddress}
+                  onChange={(event) => setInvoiceFallbackAddress(event.target.value)}
+                  placeholder="optional"
+                />
+              </label>
+              <label>
+                <span>Final expiry delta ms</span>
+                <input
+                  value={invoiceFinalExpiryDelta}
+                  onChange={(event) => setInvoiceFinalExpiryDelta(event.target.value)}
+                  placeholder="optional"
+                />
+              </label>
+            </div>
+            <label>
+              <span>UDT type script JSON</span>
+              <textarea
+                className="secret-textarea"
+                value={invoiceUdtTypeScript}
+                onChange={(event) => setInvoiceUdtTypeScript(event.target.value)}
+                rows={4}
+                spellCheck={false}
+              />
+            </label>
+            <div className="settings-row">
+              <label className="checkbox-row">
+                <input checked={invoiceAllowMpp} onChange={(event) => setInvoiceAllowMpp(event.target.checked)} type="checkbox" />
+                <span>Allow MPP</span>
+              </label>
+              <label className="checkbox-row">
+                <input
+                  checked={invoiceAllowTrampoline}
+                  onChange={(event) => setInvoiceAllowTrampoline(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Allow trampoline routing</span>
+              </label>
+            </div>
             <button
               className="command-button"
               disabled={isBusy}
@@ -222,6 +290,13 @@ export function PaymentsPanel() {
                     currency: invoiceCurrency,
                     description: invoiceDescription,
                     expiry: invoiceExpiry,
+                    payment_preimage: invoicePaymentPreimage,
+                    payment_hash: invoicePaymentHash,
+                    fallback_address: invoiceFallbackAddress,
+                    final_expiry_delta: invoiceFinalExpiryDelta,
+                    udt_type_script: parseOptionalJsonObject(invoiceUdtTypeScript),
+                    allow_mpp: invoiceAllowMpp ? true : undefined,
+                    allow_trampoline_routing: invoiceAllowTrampoline ? true : undefined,
                   }), {
                     profile,
                     token: sessionBiscuitToken,
@@ -538,6 +613,19 @@ function stringField(value: unknown, key: string): string {
 
 function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function parseOptionalJsonObject(input: string): Record<string, unknown> | undefined {
+  if (!input.trim()) {
+    return undefined;
+  }
+
+  const parsed = JSON.parse(input);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Expected UDT type script to be a JSON object");
+  }
+
+  return parsed as Record<string, unknown>;
 }
 
 function paymentFailureStatus(error: unknown): string {

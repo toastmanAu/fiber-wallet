@@ -154,6 +154,36 @@ describe("mockFiberRpc", () => {
     });
   });
 
+  it("preserves advanced mock invoice fields", async () => {
+    const invoice = await mockFiberRpc("new_invoice", {
+      amount: "100000000",
+      currency: "Fibt",
+      payment_hash: `0x${"99".repeat(32)}`,
+      fallback_address: "ckt1mockfallback",
+      final_expiry_delta: "14400000",
+      udt_type_script: {
+        code_hash: `0x${"12".repeat(32)}`,
+        hash_type: "type",
+        args: "0x",
+      },
+      allow_mpp: true,
+      allow_trampoline_routing: true,
+    });
+
+    expect(invoice).toMatchObject({
+      invoice: {
+        payment_hash: `0x${"99".repeat(32)}`,
+        fallback_address: "ckt1mockfallback",
+        final_expiry_delta: "14400000",
+        allow_mpp: true,
+        allow_trampoline_routing: true,
+        udt_type_script: {
+          hash_type: "type",
+        },
+      },
+    });
+  });
+
   it("tracks mock router build and router payment flow", async () => {
     const route = await mockFiberRpc("build_router", {
       amount: "100000000",

@@ -1,4 +1,4 @@
-import { Activity, Cable, RadioTower, ShieldCheck } from "lucide-react";
+import { Activity, Cable, RadioTower, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { MetricCard } from "../../components/MetricCard";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
@@ -39,6 +39,13 @@ export function Dashboard() {
           <p>{statusText}</p>
         </div>
       </div>
+
+      {activeProfile?.network === "mainnet" ? (
+        <div className="safety-banner danger">
+          <ShieldAlert size={17} aria-hidden="true" />
+          <span>Mainnet profile active in an early wallet build. Confirm backups, endpoint, and signer before sending funds.</span>
+        </div>
+      ) : null}
 
       <div className="metrics-grid">
         <MetricCard title="Node" value={nodeName} detail={`Network: ${network}`} icon={Activity} />

@@ -24,6 +24,7 @@ export type Profile = {
   recoveryFormat: RecoveryFormat;
   fiberRpcEndpoint: string;
   ckbRpcEndpoint: string;
+  mainnetAcknowledgedAt: string;
   fnnBinaryPath: string;
   dataDir: string;
   configPath: string;
@@ -47,6 +48,8 @@ type ProfileState = {
         | "rpcMode"
         | "fiberRpcEndpoint"
         | "ckbRpcEndpoint"
+        | "network"
+        | "mainnetAcknowledgedAt"
         | "fnnBinaryPath"
         | "dataDir"
         | "configPath"
@@ -70,6 +73,7 @@ const initialProfile: Profile = {
   recoveryFormat: "bip39",
   fiberRpcEndpoint: "http://127.0.0.1:8227",
   ckbRpcEndpoint: "https://testnet.ckbapp.dev/",
+  mainnetAcknowledgedAt: "",
   fnnBinaryPath: "",
   dataDir: "",
   configPath: "",
@@ -87,6 +91,7 @@ function withProfileDefaults(profile: Partial<Profile>): Profile {
     rpcMode: profile.rpcMode ?? "mock",
     preferredPqrLock: profile.preferredPqrLock ?? "mldsa",
     recoveryFormat: profile.recoveryFormat ?? "bip39",
+    mainnetAcknowledgedAt: profile.mainnetAcknowledgedAt ?? "",
     fnnBinaryPath: profile.fnnBinaryPath ?? "",
     dataDir: profile.dataDir ?? "",
     configPath: profile.configPath ?? "",

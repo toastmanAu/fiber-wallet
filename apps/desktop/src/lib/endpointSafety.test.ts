@@ -12,6 +12,7 @@ const profile: Profile = {
   recoveryFormat: "bip39",
   fiberRpcEndpoint: "https://fiber.example.com",
   ckbRpcEndpoint: "https://testnet.ckbapp.dev/",
+  mainnetAcknowledgedAt: "",
   fnnBinaryPath: "",
   dataDir: "",
   configPath: "",

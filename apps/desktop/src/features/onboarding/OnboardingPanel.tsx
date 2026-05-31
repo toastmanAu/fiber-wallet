@@ -16,6 +16,7 @@ export function OnboardingPanel() {
   const endpointSafety = activeProfile ? classifyRpcEndpoint(activeProfile.fiberRpcEndpoint) : null;
   const [healthStatus, setHealthStatus] = useState("");
   const [isChecking, setIsChecking] = useState(false);
+  const [mainnetEnabled, setMainnetEnabled] = useState(false);
 
   async function checkRpcHealth() {
     if (!activeProfile) {
@@ -84,6 +85,40 @@ export function OnboardingPanel() {
               <span>{endpointSafety.message}</span>
             </div>
           ) : null}
+          {activeProfile.network === "mainnet" ? (
+            <div className="safety-banner danger">
+              <ShieldAlert size={17} aria-hidden="true" />
+              <span>Mainnet is enabled for this early wallet build. Keep backups current and verify every RPC endpoint before use.</span>
+            </div>
+          ) : null}
+
+          <label>
+            <span>Network</span>
+            <select
+              value={activeProfile.network}
+              onChange={(event) => {
+                const network = event.target.value === "mainnet" ? "mainnet" : "testnet";
+                updateActiveProfile({
+                  network,
+                  mainnetAcknowledgedAt:
+                    network === "mainnet" && !activeProfile.mainnetAcknowledgedAt
+                      ? new Date().toISOString()
+                      : activeProfile.mainnetAcknowledgedAt,
+                  ckbRpcEndpoint: network === "mainnet" ? "https://mainnet.ckbapp.dev/" : "https://testnet.ckbapp.dev/",
+                });
+              }}
+            >
+              <option value="testnet">Testnet</option>
+              <option disabled={!mainnetEnabled && activeProfile.network !== "mainnet"} value="mainnet">
+                Mainnet
+              </option>
+            </select>
+          </label>
+
+          <label className="checkbox-row">
+            <input checked={mainnetEnabled} onChange={(event) => setMainnetEnabled(event.target.checked)} type="checkbox" />
+            <span>Enable mainnet selection for this session</span>
+          </label>
 
           <label>
             <span>RPC mode</span>

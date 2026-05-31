@@ -12,6 +12,7 @@ const mockProfile: Profile = {
   recoveryFormat: "bip39",
   fiberRpcEndpoint: "http://127.0.0.1:8227",
   ckbRpcEndpoint: "https://testnet.ckbapp.dev/",
+  mainnetAcknowledgedAt: "",
   fnnBinaryPath: "",
   dataDir: "",
   configPath: "",

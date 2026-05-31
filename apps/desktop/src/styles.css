@@ -439,6 +439,63 @@ h2 {
   text-align: left;
 }
 
+.payment-timeline {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  border: 1px solid rgba(142, 175, 166, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.46);
+  padding: 12px;
+}
+
+.payment-timeline-empty {
+  margin-top: 12px;
+}
+
+.payment-timeline-step {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.payment-timeline-step > span {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border: 1px solid rgba(142, 175, 166, 0.6);
+  border-radius: 999px;
+  background: rgba(142, 175, 166, 0.16);
+}
+
+.payment-timeline-step.done > span {
+  border-color: rgba(0, 224, 168, 0.7);
+  background: #00e0a8;
+}
+
+.payment-timeline-step.active > span {
+  border-color: rgba(241, 64, 255, 0.72);
+  background: #f140ff;
+}
+
+.payment-timeline-step.failed > span {
+  border-color: rgba(255, 196, 87, 0.72);
+  background: #ffc457;
+}
+
+.payment-timeline-step strong,
+.payment-timeline-step small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.payment-timeline-step small {
+  color: #9eb6af;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .warning-note {
   display: flex;
   align-items: flex-start;

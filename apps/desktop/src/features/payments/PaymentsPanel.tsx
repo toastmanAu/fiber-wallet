@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { classifyPaymentFailure } from "../../lib/paymentFailures";
+import { buildPaymentTimeline, type PaymentTimelineStep } from "../../lib/paymentTimeline";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
 
@@ -58,6 +59,7 @@ export function PaymentsPanel() {
   const [finalTlcExpiryDelta, setFinalTlcExpiryDelta] = useState("");
   const [routerText, setRouterText] = useState("[]");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("");
+  const [selectedPayment, setSelectedPayment] = useState<PaymentResult | null>(null);
   const [status, setStatus] = useState("No invoice or payment action yet");
   const [details, setDetails] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -129,6 +131,7 @@ export function PaymentsPanel() {
       token: sessionBiscuitToken,
     });
     setDetails(formatJson(result));
+    setSelectedPayment(result);
     if (result.status === "Failed" || result.failed_error) {
       return paymentFailureStatus(result.failed_error ?? "payment failed");
     }
@@ -162,6 +165,7 @@ export function PaymentsPanel() {
       token: sessionBiscuitToken,
     });
     setDetails(formatJson(result));
+    setSelectedPayment(result);
     if (result.status === "Failed" || result.failed_error) {
       return paymentFailureStatus(result.failed_error ?? "payment failed");
     }
@@ -459,6 +463,7 @@ export function PaymentsPanel() {
                   type="button"
                   onClick={() => {
                     setPaymentHash(payment.payment_hash ?? "");
+                    setSelectedPayment(payment);
                     setDetails(formatJson(payment));
                   }}
                 >
@@ -470,6 +475,11 @@ export function PaymentsPanel() {
               <p className="compact-meta">{payments.isFetching ? "Loading payments" : "No payments returned."}</p>
             )}
           </div>
+          {selectedPayment ? (
+            <PaymentTimeline payment={selectedPayment} />
+          ) : (
+            <p className="compact-meta payment-timeline-empty">Select a payment to inspect its lifecycle.</p>
+          )}
         </div>
       </div>
 
@@ -478,6 +488,30 @@ export function PaymentsPanel() {
         {details ? <pre>{details}</pre> : null}
       </div>
     </section>
+  );
+}
+
+function PaymentTimeline({ payment }: { payment: PaymentResult }) {
+  const steps = buildPaymentTimeline(payment);
+
+  return (
+    <div className="payment-timeline" aria-label="Payment timeline">
+      {steps.map((step) => (
+        <TimelineStep key={step.label} step={step} />
+      ))}
+    </div>
+  );
+}
+
+function TimelineStep({ step }: { step: PaymentTimelineStep }) {
+  return (
+    <div className={`payment-timeline-step ${step.state}`}>
+      <span aria-hidden="true" />
+      <div>
+        <strong>{step.label}</strong>
+        <small>{step.detail}</small>
+      </div>
+    </div>
   );
 }
 

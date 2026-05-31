@@ -5,7 +5,7 @@ import { allowedRpcMethods, type AllowedRpcMethod } from "../../lib/allowedRpcMe
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
 import { redactSecrets } from "../../lib/redaction";
-import { formatJson, parseRpcParams, requiresRawRpcConfirmation, shortenForConsole } from "./consoleUtils";
+import { formatJson, parseRpcParams, requiresRawRpcConfirmation, shortenForConsole, validateRpcParams } from "./consoleUtils";
 
 export function JsonRpcConsole() {
   const activeProfile = useProfileStore((state) =>
@@ -29,6 +29,7 @@ export function JsonRpcConsole() {
 
     try {
       const params = parseRpcParams(paramsText);
+      validateRpcParams(method, params);
       const response = await fiberRpc(method, params, {
         profile: activeProfile,
         token: sessionBiscuitToken,

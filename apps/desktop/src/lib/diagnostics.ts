@@ -9,6 +9,8 @@ export type DiagnosticBundleInput = {
     nodeCount: number;
     channelCount: number;
   };
+  rpcHealth: Record<string, string>;
+  configContents: string;
   recentLogs: string;
   gapChecks: string[];
 };
@@ -31,7 +33,9 @@ export function buildDiagnosticBundle(input: DiagnosticBundleInput): string {
       peer_address_book_count: input.profile.peerAddressBook.length,
     },
     rpc_status: input.rpcStatus,
+    rpc_health: input.rpcHealth,
     graph: input.graph,
+    config_contents: input.configContents,
     recent_logs: input.recentLogs,
     gap_checks: input.gapChecks,
   };

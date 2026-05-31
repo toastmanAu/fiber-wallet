@@ -4,6 +4,7 @@ import { Download, Network, RefreshCcw, ScrollText } from "lucide-react";
 import { useState } from "react";
 import { buildDiagnosticBundle } from "../../lib/diagnostics";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
+import type { Profile } from "../../lib/profileStore";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
 
@@ -99,22 +100,30 @@ export function GraphDiagnosticsPanel() {
     setIsBusy(true);
     setStatus("");
     try {
-      const [appVersion, logs] = await Promise.all([
+      const [appVersion, logs, configContents, rpcHealth] = await Promise.all([
         invoke<string>("app_version").catch(() => "unknown"),
         profile.dataDir
           ? invoke<string>("node_read_logs", { dataDir: profile.dataDir, maxLines: 120 }).catch((error) =>
               formatRpcError(error),
             )
           : Promise.resolve("No data directory configured"),
+        profile.configPath
+          ? invoke<string>("node_read_config", { configPath: profile.configPath, maxChars: 20_000 }).catch((error) =>
+              formatRpcError(error),
+            )
+          : Promise.resolve("No config path configured"),
+        buildRpcHealth(profile, sessionBiscuitToken),
       ]);
       const bundle = buildDiagnosticBundle({
         appVersion,
         profile,
-        rpcStatus: nodes.isError ? formatRpcError(nodes.error) : "graph RPC ok",
+        rpcStatus: rpcHealthSummary(rpcHealth),
         graph: {
           nodeCount: nodes.data?.length ?? 0,
           channelCount: channels.data?.length ?? 0,
         },
+        rpcHealth,
+        configContents,
         recentLogs: logs,
         gapChecks,
       });
@@ -228,6 +237,34 @@ export function GraphDiagnosticsPanel() {
       </div>
     </section>
   );
+}
+
+async function buildRpcHealth(profile: Profile, token?: string) {
+  const probes: Array<{ method: string; params: Record<string, unknown> }> = [
+    { method: "node_info", params: {} },
+    { method: "graph_nodes", params: { limit: "1" } },
+    { method: "graph_channels", params: { limit: "1" } },
+  ];
+  const entries = await Promise.all(
+    probes.map(async ({ method, params }) => {
+      try {
+        await fiberRpc(method, params, { profile, token });
+        return [method, "ok"];
+      } catch (error) {
+        return [method, formatRpcError(error)];
+      }
+    }),
+  );
+
+  return Object.fromEntries(entries);
+}
+
+function rpcHealthSummary(rpcHealth: Record<string, string>): string {
+  const failures = Object.entries(rpcHealth)
+    .filter(([, status]) => status !== "ok")
+    .map(([method]) => method);
+
+  return failures.length ? `RPC probe failures: ${failures.join(", ")}` : "RPC probes ok";
 }
 
 function GraphSvg({ nodes, channels }: { nodes: GraphNode[]; channels: GraphChannel[] }) {

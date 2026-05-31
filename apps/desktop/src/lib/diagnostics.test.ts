@@ -32,11 +32,16 @@ describe("buildDiagnosticBundle", () => {
         nodeCount: 1,
         channelCount: 1,
       },
+      rpcHealth: {
+        node_info: "ok Authorization: Bearer secret-token",
+      },
+      configContents: `biscuit_private_key: ed25519-private/${"a".repeat(64)}`,
       recentLogs: "FIBER_SECRET_KEY_PASSWORD='correct horse battery staple'",
       gapChecks: ["docs/gap-checks/milestone-0.md"],
     });
 
     expect(bundle).toContain("Authorization: Bearer [REDACTED]");
+    expect(bundle).toContain("biscuit_private_key: ed25519-private/[REDACTED]");
     expect(bundle).toContain("FIBER_SECRET_KEY_PASSWORD='[REDACTED]'");
     expect(bundle).not.toContain("secret-token");
     expect(bundle).not.toContain("correct horse battery staple");

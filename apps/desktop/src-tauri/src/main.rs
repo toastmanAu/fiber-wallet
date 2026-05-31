@@ -595,6 +595,19 @@ fn node_read_logs(data_dir: String, max_lines: Option<usize>) -> Result<String, 
 }
 
 #[tauri::command]
+fn node_read_config(config_path: String, max_chars: Option<usize>) -> Result<String, NodeCommandError> {
+    let path = Path::new(&config_path);
+    let contents = fs::read_to_string(path).map_err(|err| NodeCommandError {
+        kind: "config_read_failed",
+        message: err.to_string(),
+    })?;
+    let keep = max_chars.unwrap_or(20_000).min(80_000);
+    let truncated = contents.chars().take(keep).collect::<String>();
+
+    Ok(redact_log_text(&truncated))
+}
+
+#[tauri::command]
 fn wallet_status(data_dir: String) -> WalletStatus {
     let key_path = wallet_key_path(&data_dir);
     let backup_path = wallet_backup_path(&data_dir);
@@ -1362,6 +1375,7 @@ fn main() {
             node_stop,
             node_status,
             node_read_logs,
+            node_read_config,
             wallet_status,
             wallet_import_ckb_key,
             wallet_export_encrypted_backup,
@@ -1445,6 +1459,23 @@ mod tests {
         assert!(config.contains("listening_addr: \"127.0.0.1:8227\""));
         assert!(config.contains("biscuit_public_key: \"ed25519/example\""));
         assert!(config.contains("rpc_url: \"https://testnet.ckbapp.dev/\""));
+    }
+
+    #[test]
+    fn node_read_config_redacts_and_bounds_contents() {
+        let path = std::env::temp_dir().join(format!("fiber-wallet-config-test-{}.yml", now_ms()));
+        fs::write(
+            &path,
+            "rpc:\n  listening_addr: 127.0.0.1:8227\nFIBER_SECRET_KEY_PASSWORD=secret-value\n",
+        )
+        .unwrap();
+
+        let contents = node_read_config(path.display().to_string(), Some(120)).unwrap();
+
+        assert!(contents.len() <= 120);
+        assert!(contents.contains("[REDACTED]"));
+        assert!(!contents.contains("secret-value"));
+        let _ = fs::remove_file(path);
     }
 
     #[test]

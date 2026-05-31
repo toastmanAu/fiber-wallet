@@ -34,6 +34,13 @@ export function ChannelsPanel() {
   const [fundingAmount, setFundingAmount] = useState("49900000000");
   const [publicChannel, setPublicChannel] = useState(true);
   const [oneWay, setOneWay] = useState(false);
+  const [acceptTemporaryChannelId, setAcceptTemporaryChannelId] = useState("");
+  const [acceptFundingAmount, setAcceptFundingAmount] = useState("49900000000");
+  const [updateChannelId, setUpdateChannelId] = useState("");
+  const [updateEnabled, setUpdateEnabled] = useState(true);
+  const [updateTlcExpiryDelta, setUpdateTlcExpiryDelta] = useState("");
+  const [updateTlcMinimumValue, setUpdateTlcMinimumValue] = useState("");
+  const [updateTlcFeeProportional, setUpdateTlcFeeProportional] = useState("");
   const [shutdownChannelId, setShutdownChannelId] = useState("");
   const [shutdownConfirm, setShutdownConfirm] = useState("");
   const [forceShutdown, setForceShutdown] = useState(false);
@@ -174,6 +181,134 @@ export function ChannelsPanel() {
             />
           </div>
 
+          <h2>Accept Channel</h2>
+          <div className="settings-form">
+            <label>
+              <span>Temporary channel ID</span>
+              <input
+                value={acceptTemporaryChannelId}
+                onChange={(event) => setAcceptTemporaryChannelId(event.target.value)}
+                placeholder="0x..."
+              />
+            </label>
+            <label>
+              <span>Funding amount shannons</span>
+              <input
+                value={acceptFundingAmount}
+                onChange={(event) => setAcceptFundingAmount(event.target.value)}
+                placeholder="49900000000"
+              />
+            </label>
+            <div className={fundingWarningText(acceptFundingAmount) ? "warning-note danger" : "warning-note"}>
+              <ShieldAlert size={16} aria-hidden="true" />
+              <span>{fundingWarningText(acceptFundingAmount) || "Accepting a channel commits local capacity to the peer request."}</span>
+            </div>
+            <ConfirmActionButton
+              confirmLabel="Accept Channel"
+              disabled={isBusy}
+              icon={<Cable size={16} aria-hidden="true" />}
+              items={[
+                { label: "Temporary ID", value: acceptTemporaryChannelId },
+                { label: "Funding amount", value: acceptFundingAmount },
+              ]}
+              label="Accept Channel"
+              title="Confirm Channel Accept"
+              warning="Accepting a channel commits funding through the active Fiber RPC profile."
+              onConfirm={() =>
+                run(async () => {
+                  const result = await fiberRpc<{ channel_id?: string }>(
+                    "accept_channel",
+                    compactObject({
+                      temporary_channel_id: acceptTemporaryChannelId,
+                      funding_amount: acceptFundingAmount,
+                    }),
+                    {
+                      profile: activeProfile,
+                      token: sessionBiscuitToken,
+                    },
+                  );
+                  if (result.channel_id) {
+                    setUpdateChannelId(result.channel_id);
+                    setShutdownChannelId(result.channel_id);
+                  }
+                  return "Accept channel requested";
+                })
+              }
+            />
+          </div>
+
+          <h2>Update Channel</h2>
+          <div className="settings-form">
+            <label>
+              <span>Channel ID</span>
+              <input value={updateChannelId} onChange={(event) => setUpdateChannelId(event.target.value)} placeholder="0x..." />
+            </label>
+            <label className="checkbox-row">
+              <input checked={updateEnabled} onChange={(event) => setUpdateEnabled(event.target.checked)} type="checkbox" />
+              <span>Forwarding enabled</span>
+            </label>
+            <div className="settings-row">
+              <label>
+                <span>TLC expiry delta ms</span>
+                <input
+                  value={updateTlcExpiryDelta}
+                  onChange={(event) => setUpdateTlcExpiryDelta(event.target.value)}
+                  placeholder="optional"
+                />
+              </label>
+              <label>
+                <span>TLC minimum value</span>
+                <input
+                  value={updateTlcMinimumValue}
+                  onChange={(event) => setUpdateTlcMinimumValue(event.target.value)}
+                  placeholder="optional"
+                />
+              </label>
+            </div>
+            <label>
+              <span>TLC fee proportional millionths</span>
+              <input
+                value={updateTlcFeeProportional}
+                onChange={(event) => setUpdateTlcFeeProportional(event.target.value)}
+                placeholder="optional"
+              />
+            </label>
+            <ConfirmActionButton
+              confirmLabel="Update Channel"
+              disabled={isBusy}
+              icon={<Cable size={16} aria-hidden="true" />}
+              items={[
+                { label: "Channel ID", value: updateChannelId },
+                { label: "Forwarding", value: updateEnabled ? "enabled" : "disabled" },
+                { label: "Expiry delta", value: updateTlcExpiryDelta || "unchanged" },
+                { label: "Minimum value", value: updateTlcMinimumValue || "unchanged" },
+                { label: "Fee millionths", value: updateTlcFeeProportional || "unchanged" },
+              ]}
+              label="Update Channel"
+              title="Confirm Channel Update"
+              warning="Updating channel policy changes forwarding behavior through the active Fiber RPC profile."
+              onConfirm={() =>
+                run(async () => {
+                  await fiberRpc(
+                    "update_channel",
+                    compactObject({
+                      channel_id: updateChannelId,
+                      enabled: updateEnabled,
+                      tlc_expiry_delta: updateTlcExpiryDelta,
+                      tlc_minimum_value: updateTlcMinimumValue,
+                      tlc_fee_proportional_millionths: updateTlcFeeProportional,
+                    }),
+                    {
+                      profile: activeProfile,
+                      token: sessionBiscuitToken,
+                    },
+                  );
+                  return "Update channel requested";
+                })
+              }
+            />
+          </div>
+
           <h2>Shutdown</h2>
           <div className="settings-form">
             <label>
@@ -269,7 +404,11 @@ export function ChannelsPanel() {
                   className="resource-card resource-card-main"
                   key={channel.channel_id ?? index}
                   type="button"
-                  onClick={() => setShutdownChannelId(channel.channel_id ?? "")}
+                  onClick={() => {
+                    setShutdownChannelId(channel.channel_id ?? "");
+                    setUpdateChannelId(channel.channel_id ?? "");
+                    setAcceptTemporaryChannelId(channel.channel_id ?? "");
+                  }}
                 >
                   <strong>{channel.channel_id ? shorten(channel.channel_id) : "unknown channel"}</strong>
                   <small>

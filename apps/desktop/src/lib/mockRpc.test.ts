@@ -44,6 +44,38 @@ describe("mockFiberRpc", () => {
     });
   });
 
+  it("tracks mock channel accept and update", async () => {
+    const accepted = await mockFiberRpc("accept_channel", {
+      temporary_channel_id: `0x${"aa".repeat(32)}`,
+      funding_amount: "49900000000",
+    });
+    expect(accepted).toMatchObject({ channel_id: expect.any(String) });
+
+    const channelId = (accepted as { channel_id: string }).channel_id;
+    await expect(
+      mockFiberRpc("update_channel", {
+        channel_id: channelId,
+        enabled: false,
+        tlc_expiry_delta: "86400000",
+        tlc_minimum_value: "1000",
+        tlc_fee_proportional_millionths: "100",
+      }),
+    ).resolves.toEqual({});
+
+    await expect(mockFiberRpc("list_channels")).resolves.toMatchObject({
+      channels: [
+        expect.objectContaining({
+          channel_id: channelId,
+          state: "accepted",
+          enabled: false,
+          tlc_expiry_delta: "86400000",
+          tlc_minimum_value: "1000",
+          tlc_fee_proportional_millionths: "100",
+        }),
+      ],
+    });
+  });
+
   it("tracks mock external funding open, sign, and submit", async () => {
     const pubkey = `03${"33".repeat(32)}`;
     const script = {

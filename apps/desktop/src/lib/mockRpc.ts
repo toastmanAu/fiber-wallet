@@ -11,6 +11,10 @@ type MockChannel = {
   state: string;
   funding_amount: string;
   public: boolean;
+  enabled?: boolean;
+  tlc_expiry_delta?: string;
+  tlc_minimum_value?: string;
+  tlc_fee_proportional_millionths?: string;
 };
 
 type MockInvoice = {
@@ -159,6 +163,46 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
     });
 
     return { temporary_channel_id: channelId };
+  }
+
+  if (method === "accept_channel") {
+    const input = objectParams(params);
+    const temporaryChannelId = stringParam(input.temporary_channel_id);
+    const fundingAmount = stringParam(input.funding_amount);
+
+    if (!temporaryChannelId || !fundingAmount) {
+      throw new Error("mock RPC accept_channel requires temporary_channel_id and funding_amount");
+    }
+
+    const channelId = `0x${(mockChannels.length + 1).toString(16).padStart(64, "a")}`;
+    mockChannels.push({
+      channel_id: channelId,
+      peer_pubkey: `02${"ac".repeat(32)}`,
+      state: "accepted",
+      funding_amount: fundingAmount,
+      public: true,
+      enabled: true,
+    });
+
+    return { channel_id: channelId };
+  }
+
+  if (method === "update_channel") {
+    const input = objectParams(params);
+    const channelId = stringParam(input.channel_id);
+    const channel = mockChannels.find((item) => item.channel_id === channelId);
+
+    if (!channel) {
+      throw new Error("mock RPC channel not found");
+    }
+
+    channel.enabled = input.enabled !== false;
+    channel.tlc_expiry_delta = stringParam(input.tlc_expiry_delta) ?? channel.tlc_expiry_delta;
+    channel.tlc_minimum_value = stringParam(input.tlc_minimum_value) ?? channel.tlc_minimum_value;
+    channel.tlc_fee_proportional_millionths =
+      stringParam(input.tlc_fee_proportional_millionths) ?? channel.tlc_fee_proportional_millionths;
+
+    return {};
   }
 
   if (method === "open_channel_with_external_funding") {

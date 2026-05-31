@@ -1,10 +1,11 @@
 import { SendHorizontal } from "lucide-react";
 import { useState } from "react";
+import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { allowedRpcMethods, type AllowedRpcMethod } from "../../lib/allowedRpcMethods";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
 import { redactSecrets } from "../../lib/redaction";
-import { formatJson, parseRpcParams } from "./consoleUtils";
+import { formatJson, parseRpcParams, requiresRawRpcConfirmation, shortenForConsole } from "./consoleUtils";
 
 export function JsonRpcConsole() {
   const activeProfile = useProfileStore((state) =>
@@ -15,6 +16,7 @@ export function JsonRpcConsole() {
   const [paramsText, setParamsText] = useState("[]");
   const [output, setOutput] = useState("");
   const [isPending, setIsPending] = useState(false);
+  const needsConfirmation = requiresRawRpcConfirmation(method);
 
   async function submit() {
     if (!activeProfile) {
@@ -46,10 +48,27 @@ export function JsonRpcConsole() {
           <h2>Raw RPC Console</h2>
           <p>MVP allowlist only. Params must be a JSON array.</p>
         </div>
-        <button className="command-button" type="button" onClick={submit} disabled={isPending}>
-          <SendHorizontal size={16} aria-hidden="true" />
-          <span>{isPending ? "Sending" : "Send"}</span>
-        </button>
+        {needsConfirmation ? (
+          <ConfirmActionButton
+            confirmLabel="Send Raw RPC"
+            disabled={isPending}
+            icon={<SendHorizontal size={16} aria-hidden="true" />}
+            items={[
+              { label: "Method", value: method },
+              { label: "Profile", value: activeProfile ? `${activeProfile.name} / ${activeProfile.rpcMode}` : "No profile" },
+              { label: "Params", value: shortenForConsole(paramsText.trim() || "[]") },
+            ]}
+            label={isPending ? "Sending" : "Send"}
+            title="Confirm Raw RPC Write"
+            warning="This raw RPC method can change node, channel, invoice, payment, or signing state."
+            onConfirm={submit}
+          />
+        ) : (
+          <button className="command-button" type="button" onClick={submit} disabled={isPending}>
+            <SendHorizontal size={16} aria-hidden="true" />
+            <span>{isPending ? "Sending" : "Send"}</span>
+          </button>
+        )}
       </div>
 
       <div className="console-grid">
@@ -87,4 +106,3 @@ export function JsonRpcConsole() {
     </section>
   );
 }
-

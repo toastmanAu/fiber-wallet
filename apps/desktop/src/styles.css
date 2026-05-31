@@ -277,14 +277,28 @@ h2 {
 }
 
 .settings-form input,
-.settings-form select {
+.settings-form select,
+.secret-textarea {
   width: 100%;
-  min-height: 38px;
   border: 1px solid rgba(142, 175, 166, 0.26);
   border-radius: 8px;
   background: rgba(5, 8, 9, 0.74);
   color: #eff7f3;
   padding: 0 10px;
+}
+
+.settings-form input,
+.settings-form select {
+  min-height: 38px;
+}
+
+.secret-textarea {
+  min-height: 120px;
+  padding: 10px;
+  resize: vertical;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .settings-row {
@@ -325,9 +339,22 @@ h2 {
 }
 
 .settings-form input:focus,
-.settings-form select:focus {
+.settings-form select:focus,
+.secret-textarea:focus {
   outline: 2px solid rgba(0, 224, 168, 0.3);
   outline-offset: 1px;
+}
+
+.checkbox-row {
+  display: flex;
+  grid-template-columns: unset;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: 16px;
+  min-height: 16px;
 }
 
 .safety-banner {

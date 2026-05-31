@@ -15,6 +15,7 @@ import { Dashboard } from "./features/dashboard/Dashboard";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { NodeManagerPanel } from "./features/settings/NodeManagerPanel";
 import { JsonRpcConsole } from "./features/terminal/JsonRpcConsole";
+import { WalletKeyPanel } from "./features/wallet/WalletKeyPanel";
 import { useProfileStore } from "./lib/profileStore";
 
 type NavId = "dashboard" | "profiles" | "wallet" | "auth" | "peers" | "channels" | "graph" | "terminal" | "settings";
@@ -81,13 +82,18 @@ export default function App() {
 
         {activeView === "terminal" ? <JsonRpcConsole /> : null}
         {activeView === "settings" ? <NodeManagerPanel /> : null}
+        {activeView === "wallet" ? <WalletKeyPanel /> : null}
         {activeView === "dashboard" || activeView === "profiles" ? (
           <section className="content-grid">
             <Dashboard />
             <OnboardingPanel />
           </section>
         ) : null}
-        {activeView !== "dashboard" && activeView !== "profiles" && activeView !== "terminal" && activeView !== "settings" ? (
+        {activeView !== "dashboard" &&
+        activeView !== "profiles" &&
+        activeView !== "terminal" &&
+        activeView !== "settings" &&
+        activeView !== "wallet" ? (
           <section className="placeholder-panel">
             <h2>{activeNav.label}</h2>
             <p>This section is queued behind the RPC connectivity slice.</p>

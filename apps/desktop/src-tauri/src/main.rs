@@ -1,5 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
+use argon2::Argon2;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -142,6 +147,43 @@ struct NodeStatus {
 
 #[derive(Debug, Serialize)]
 struct NodeCommandError {
+    kind: &'static str,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct WalletStatus {
+    key_exists: bool,
+    key_path: String,
+    backup_exists: bool,
+    backup_path: String,
+}
+
+#[derive(Deserialize)]
+struct WalletImportInput {
+    data_dir: String,
+    exported_key_contents: String,
+    overwrite: bool,
+}
+
+#[derive(Deserialize)]
+struct WalletBackupInput {
+    data_dir: String,
+    passphrase: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct WalletBackupEnvelope {
+    version: u8,
+    kdf: String,
+    cipher: String,
+    salt_hex: String,
+    nonce_hex: String,
+    ciphertext_hex: String,
+}
+
+#[derive(Debug, Serialize)]
+struct WalletCommandError {
     kind: &'static str,
     message: String,
 }
@@ -448,6 +490,120 @@ fn node_read_logs(data_dir: String, max_lines: Option<usize>) -> Result<String, 
     Ok(redact_log_text(&lines[start..].join("\n")))
 }
 
+#[tauri::command]
+fn wallet_status(data_dir: String) -> WalletStatus {
+    let key_path = wallet_key_path(&data_dir);
+    let backup_path = wallet_backup_path(&data_dir);
+
+    WalletStatus {
+        key_exists: key_path.is_file(),
+        key_path: key_path.display().to_string(),
+        backup_exists: backup_path.is_file(),
+        backup_path: backup_path.display().to_string(),
+    }
+}
+
+#[tauri::command]
+fn wallet_import_ckb_key(input: WalletImportInput) -> Result<WalletStatus, WalletCommandError> {
+    let key_path = wallet_key_path(&input.data_dir);
+
+    if key_path.exists() && !input.overwrite {
+        return Err(WalletCommandError {
+            kind: "key_exists",
+            message: "ckb/key already exists; enable overwrite to replace it".to_string(),
+        });
+    }
+
+    let private_key = extract_private_key_line(&input.exported_key_contents)?;
+
+    if let Some(parent) = key_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| WalletCommandError {
+            kind: "key_parent_create_failed",
+            message: err.to_string(),
+        })?;
+    }
+
+    fs::write(&key_path, format!("{private_key}\n")).map_err(|err| WalletCommandError {
+        kind: "key_write_failed",
+        message: err.to_string(),
+    })?;
+    set_private_file_permissions(&key_path)?;
+
+    Ok(wallet_status(input.data_dir))
+}
+
+#[tauri::command]
+fn wallet_export_encrypted_backup(input: WalletBackupInput) -> Result<String, WalletCommandError> {
+    require_passphrase(&input.passphrase)?;
+    let key_path = wallet_key_path(&input.data_dir);
+    let plaintext = fs::read_to_string(&key_path).map_err(|err| WalletCommandError {
+        kind: "key_read_failed",
+        message: err.to_string(),
+    })?;
+    let envelope = encrypt_key_backup(plaintext.as_bytes(), &input.passphrase)?;
+    let backup_path = wallet_backup_path(&input.data_dir);
+
+    if let Some(parent) = backup_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| WalletCommandError {
+            kind: "backup_parent_create_failed",
+            message: err.to_string(),
+        })?;
+    }
+
+    fs::write(
+        &backup_path,
+        serde_json::to_string_pretty(&envelope).map_err(|err| WalletCommandError {
+            kind: "backup_serialize_failed",
+            message: err.to_string(),
+        })?,
+    )
+    .map_err(|err| WalletCommandError {
+        kind: "backup_write_failed",
+        message: err.to_string(),
+    })?;
+    set_private_file_permissions(&backup_path)?;
+
+    Ok(backup_path.display().to_string())
+}
+
+#[tauri::command]
+fn wallet_validate_backup(input: WalletBackupInput) -> Result<bool, WalletCommandError> {
+    require_passphrase(&input.passphrase)?;
+    let envelope = read_backup_envelope(&input.data_dir)?;
+    decrypt_key_backup(&envelope, &input.passphrase).map(|_| true)
+}
+
+#[tauri::command]
+fn wallet_restore_encrypted_backup(input: WalletBackupInput, overwrite: bool) -> Result<WalletStatus, WalletCommandError> {
+    require_passphrase(&input.passphrase)?;
+    let key_path = wallet_key_path(&input.data_dir);
+
+    if key_path.exists() && !overwrite {
+        return Err(WalletCommandError {
+            kind: "key_exists",
+            message: "ckb/key already exists; enable overwrite to restore".to_string(),
+        });
+    }
+
+    let envelope = read_backup_envelope(&input.data_dir)?;
+    let plaintext = decrypt_key_backup(&envelope, &input.passphrase)?;
+
+    if let Some(parent) = key_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| WalletCommandError {
+            kind: "key_parent_create_failed",
+            message: err.to_string(),
+        })?;
+    }
+
+    fs::write(&key_path, plaintext).map_err(|err| WalletCommandError {
+        kind: "key_write_failed",
+        message: err.to_string(),
+    })?;
+    set_private_file_permissions(&key_path)?;
+
+    Ok(wallet_status(input.data_dir))
+}
+
 fn validate_endpoint(endpoint: &str) -> Result<Url, RpcClientError> {
     let parsed = Url::parse(endpoint).map_err(|err| RpcClientError {
         kind: "invalid_endpoint",
@@ -701,6 +857,167 @@ fn redact_log_text(input: &str) -> String {
         .join("\n")
 }
 
+fn wallet_key_path(data_dir: &str) -> PathBuf {
+    Path::new(data_dir).join("ckb").join("key")
+}
+
+fn wallet_backup_path(data_dir: &str) -> PathBuf {
+    Path::new(data_dir).join("ckb").join("fiber-wallet-key-backup.json")
+}
+
+fn extract_private_key_line(contents: &str) -> Result<String, WalletCommandError> {
+    let line = contents
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .ok_or_else(|| WalletCommandError {
+            kind: "empty_key",
+            message: "No private key line found".to_string(),
+        })?;
+    let hex = line.strip_prefix("0x").unwrap_or(line);
+
+    if hex.len() != 64 || !hex.chars().all(|value| value.is_ascii_hexdigit()) {
+        return Err(WalletCommandError {
+            kind: "invalid_private_key",
+            message: "Expected a 32-byte private key hex string".to_string(),
+        });
+    }
+
+    Ok(line.to_string())
+}
+
+fn require_passphrase(passphrase: &str) -> Result<(), WalletCommandError> {
+    if passphrase.trim().len() < 12 {
+        return Err(WalletCommandError {
+            kind: "weak_passphrase",
+            message: "Backup passphrase must be at least 12 characters".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn encrypt_key_backup(plaintext: &[u8], passphrase: &str) -> Result<WalletBackupEnvelope, WalletCommandError> {
+    let mut salt = [0u8; 16];
+    let mut nonce = [0u8; 12];
+    getrandom::fill(&mut salt).map_err(|err| WalletCommandError {
+        kind: "random_failed",
+        message: err.to_string(),
+    })?;
+    getrandom::fill(&mut nonce).map_err(|err| WalletCommandError {
+        kind: "random_failed",
+        message: err.to_string(),
+    })?;
+
+    let key = derive_backup_key(passphrase, &salt)?;
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|err| WalletCommandError {
+        kind: "cipher_init_failed",
+        message: err.to_string(),
+    })?;
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), plaintext)
+        .map_err(|err| WalletCommandError {
+            kind: "backup_encrypt_failed",
+            message: err.to_string(),
+        })?;
+
+    Ok(WalletBackupEnvelope {
+        version: 1,
+        kdf: "argon2id".to_string(),
+        cipher: "aes-256-gcm".to_string(),
+        salt_hex: hex_encode(&salt),
+        nonce_hex: hex_encode(&nonce),
+        ciphertext_hex: hex_encode(&ciphertext),
+    })
+}
+
+fn decrypt_key_backup(envelope: &WalletBackupEnvelope, passphrase: &str) -> Result<Vec<u8>, WalletCommandError> {
+    if envelope.version != 1 || envelope.kdf != "argon2id" || envelope.cipher != "aes-256-gcm" {
+        return Err(WalletCommandError {
+            kind: "unsupported_backup",
+            message: "Unsupported backup envelope".to_string(),
+        });
+    }
+
+    let salt = hex_decode(&envelope.salt_hex)?;
+    let nonce = hex_decode(&envelope.nonce_hex)?;
+    let ciphertext = hex_decode(&envelope.ciphertext_hex)?;
+    let key = derive_backup_key(passphrase, &salt)?;
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|err| WalletCommandError {
+        kind: "cipher_init_failed",
+        message: err.to_string(),
+    })?;
+
+    cipher
+        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+        .map_err(|err| WalletCommandError {
+            kind: "backup_decrypt_failed",
+            message: err.to_string(),
+        })
+}
+
+fn derive_backup_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], WalletCommandError> {
+    let mut key = [0u8; 32];
+    Argon2::default()
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .map_err(|err| WalletCommandError {
+            kind: "key_derivation_failed",
+            message: err.to_string(),
+        })?;
+    Ok(key)
+}
+
+fn read_backup_envelope(data_dir: &str) -> Result<WalletBackupEnvelope, WalletCommandError> {
+    let backup_path = wallet_backup_path(data_dir);
+    let contents = fs::read_to_string(&backup_path).map_err(|err| WalletCommandError {
+        kind: "backup_read_failed",
+        message: err.to_string(),
+    })?;
+
+    serde_json::from_str(&contents).map_err(|err| WalletCommandError {
+        kind: "backup_parse_failed",
+        message: err.to_string(),
+    })
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect::<String>()
+}
+
+fn hex_decode(input: &str) -> Result<Vec<u8>, WalletCommandError> {
+    if input.len() % 2 != 0 {
+        return Err(WalletCommandError {
+            kind: "invalid_hex",
+            message: "Hex string has odd length".to_string(),
+        });
+    }
+
+    (0..input.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&input[index..index + 2], 16).map_err(|err| WalletCommandError {
+                kind: "invalid_hex",
+                message: err.to_string(),
+            })
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+fn set_private_file_permissions(path: &Path) -> Result<(), WalletCommandError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|err| WalletCommandError {
+        kind: "permission_set_failed",
+        message: err.to_string(),
+    })
+}
+
+#[cfg(not(unix))]
+fn set_private_file_permissions(_path: &Path) -> Result<(), WalletCommandError> {
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(NodeManager::default())
@@ -716,7 +1033,12 @@ fn main() {
             node_start,
             node_stop,
             node_status,
-            node_read_logs
+            node_read_logs,
+            wallet_status,
+            wallet_import_ckb_key,
+            wallet_export_encrypted_backup,
+            wallet_validate_backup,
+            wallet_restore_encrypted_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -779,5 +1101,24 @@ mod tests {
         assert!(config.contains("listening_addr: \"127.0.0.1:8227\""));
         assert!(config.contains("biscuit_public_key: \"ed25519/example\""));
         assert!(config.contains("rpc_url: \"https://testnet.ckbapp.dev/\""));
+    }
+
+    #[test]
+    fn private_key_extraction_uses_first_non_empty_line() {
+        let key = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let extracted = extract_private_key_line(&format!("\n{key}\nchain-code")).unwrap();
+
+        assert_eq!(extracted, key);
+    }
+
+    #[test]
+    fn backup_encryption_round_trips_key_material() {
+        let plaintext = b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n";
+        let passphrase = "strong backup passphrase";
+        let envelope = encrypt_key_backup(plaintext, passphrase).unwrap();
+        let decrypted = decrypt_key_backup(&envelope, passphrase).unwrap();
+
+        assert_eq!(decrypted, plaintext);
+        assert!(decrypt_key_backup(&envelope, "wrong backup passphrase").is_err());
     }
 }

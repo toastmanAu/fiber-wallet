@@ -230,6 +230,38 @@ h2 {
   color: #8fa9a1;
 }
 
+.settings-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(142, 175, 166, 0.18);
+}
+
+.settings-form label {
+  display: grid;
+  gap: 7px;
+  color: #b8cbc5;
+  font-size: 13px;
+}
+
+.settings-form input,
+.settings-form select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(142, 175, 166, 0.26);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.74);
+  color: #eff7f3;
+  padding: 0 10px;
+}
+
+.settings-form input:focus,
+.settings-form select:focus {
+  outline: 2px solid rgba(0, 224, 168, 0.3);
+  outline-offset: 1px;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -249,4 +281,3 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
-

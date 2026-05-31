@@ -43,6 +43,39 @@ const mockChannels: MockChannel[] = [];
 const mockInvoices: MockInvoice[] = [];
 const mockPayments: MockPayment[] = [];
 
+const mockGraphNodes = [
+  {
+    pubkey: "02b6d4e3ab86a2ca2fad6fae0ecb2e1e559e0b911939872a90abdda6d20302be71",
+    node_name: "fiber-testnet-public-bottle",
+    addresses: [],
+  },
+  {
+    pubkey: "0291a6576bd5a94bd74b27080a48340875338fff9f6d6361fe6b8db8d0d1912fcc",
+    node_name: "fiber-testnet-public-bracer",
+    addresses: [],
+  },
+  {
+    pubkey: "03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    node_name: "mock-local-node",
+    addresses: ["/ip4/127.0.0.1/tcp/8228"],
+  },
+];
+
+const mockGraphChannels = [
+  {
+    channel_id: `0x${"31".repeat(32)}`,
+    node1: mockGraphNodes[0].pubkey,
+    node2: mockGraphNodes[1].pubkey,
+    capacity: "49900000000",
+  },
+  {
+    channel_id: `0x${"32".repeat(32)}`,
+    node1: mockGraphNodes[2].pubkey,
+    node2: mockGraphNodes[0].pubkey,
+    capacity: "49900000000",
+  },
+];
+
 const fixtures: Record<string, MockRpcValue> = {
   node_info: {
     node_name: "mock-fiber-node",
@@ -241,6 +274,22 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
   if (method === "build_router") {
     return {
       router_hops: [],
+    };
+  }
+
+  if (method === "graph_nodes") {
+    const limit = numberParam(objectParams(params).limit) ?? 500;
+    return {
+      nodes: structuredClone(mockGraphNodes.slice(0, limit)),
+      last_cursor: null,
+    };
+  }
+
+  if (method === "graph_channels") {
+    const limit = numberParam(objectParams(params).limit) ?? 500;
+    return {
+      channels: structuredClone(mockGraphChannels.slice(0, limit)),
+      last_cursor: null,
     };
   }
 

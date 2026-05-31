@@ -15,6 +15,7 @@ import { useState } from "react";
 import { AuthVaultPanel } from "./features/auth/AuthVaultPanel";
 import { ChannelsPanel } from "./features/channels/ChannelsPanel";
 import { Dashboard } from "./features/dashboard/Dashboard";
+import { GraphDiagnosticsPanel } from "./features/graph/GraphDiagnosticsPanel";
 import { OnboardingPanel } from "./features/onboarding/OnboardingPanel";
 import { PaymentsPanel } from "./features/payments/PaymentsPanel";
 import { PeersPanel } from "./features/peers/PeersPanel";
@@ -103,6 +104,7 @@ export default function App() {
         {activeView === "peers" ? <PeersPanel /> : null}
         {activeView === "channels" ? <ChannelsPanel /> : null}
         {activeView === "payments" ? <PaymentsPanel /> : null}
+        {activeView === "graph" ? <GraphDiagnosticsPanel /> : null}
         {activeView === "dashboard" || activeView === "profiles" ? (
           <section className="content-grid">
             <Dashboard />
@@ -117,7 +119,8 @@ export default function App() {
         activeView !== "auth" &&
         activeView !== "peers" &&
         activeView !== "channels" &&
-        activeView !== "payments" ? (
+        activeView !== "payments" &&
+        activeView !== "graph" ? (
           <section className="placeholder-panel">
             <h2>{activeNav.label}</h2>
             <p>This section is queued behind the RPC connectivity slice.</p>

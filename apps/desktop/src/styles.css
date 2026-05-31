@@ -391,6 +391,38 @@ h2 {
   color: #ffe2a6;
 }
 
+.graph-canvas {
+  width: 100%;
+  min-height: 320px;
+  margin: 18px 0;
+  border: 1px solid rgba(142, 175, 166, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.58);
+}
+
+.graph-canvas svg {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+}
+
+.graph-canvas line {
+  stroke: rgba(0, 224, 168, 0.42);
+  stroke-width: 0.7;
+}
+
+.graph-canvas circle {
+  fill: #00e0a8;
+  stroke: #d9fff5;
+  stroke-width: 0.8;
+}
+
+.graph-canvas text {
+  fill: #d9fff5;
+  font-size: 4px;
+  text-anchor: middle;
+}
+
 .node-status {
   display: grid;
   gap: 10px;

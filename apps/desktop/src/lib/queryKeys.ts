@@ -10,4 +10,8 @@ export const queryKeys = {
   paymentsRoot: () => ["fiber-rpc", "list_payments"] as const,
   payments: (profileId?: string, rpcMode?: string, endpoint?: string, filters?: string) =>
     ["fiber-rpc", "list_payments", profileId, rpcMode, endpoint, filters] as const,
+  graphNodes: (profileId?: string, rpcMode?: string, endpoint?: string, limit?: string) =>
+    ["fiber-rpc", "graph_nodes", profileId, rpcMode, endpoint, limit] as const,
+  graphChannels: (profileId?: string, rpcMode?: string, endpoint?: string, limit?: string) =>
+    ["fiber-rpc", "graph_channels", profileId, rpcMode, endpoint, limit] as const,
 };

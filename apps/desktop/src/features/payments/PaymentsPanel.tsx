@@ -3,6 +3,7 @@ import { FileSearch, ReceiptText, RefreshCcw, SendHorizontal, XCircle } from "lu
 import { useMemo, useState } from "react";
 import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
+import { classifyPaymentFailure } from "../../lib/paymentFailures";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
 
@@ -107,7 +108,7 @@ export function PaymentsPanel() {
         await queryClient.invalidateQueries({ queryKey: queryKeys.paymentsRoot() });
       }
     } catch (error) {
-      setStatus(formatRpcError(error));
+      setStatus(paymentFailureStatus(formatRpcError(error)));
     } finally {
       setIsBusy(false);
     }
@@ -128,6 +129,9 @@ export function PaymentsPanel() {
       token: sessionBiscuitToken,
     });
     setDetails(formatJson(result));
+    if (result.status === "Failed" || result.failed_error) {
+      return paymentFailureStatus(result.failed_error ?? "payment failed");
+    }
     return dryRun ? "Payment preview completed" : "Payment sent";
   }
 
@@ -158,6 +162,9 @@ export function PaymentsPanel() {
       token: sessionBiscuitToken,
     });
     setDetails(formatJson(result));
+    if (result.status === "Failed" || result.failed_error) {
+      return paymentFailureStatus(result.failed_error ?? "payment failed");
+    }
     return dryRun ? "Router payment preview completed" : "Router payment sent";
   }
 
@@ -456,7 +463,7 @@ export function PaymentsPanel() {
                   }}
                 >
                   <strong>{payment.status ?? "unknown"} / {payment.payment_hash ? shorten(payment.payment_hash) : "unknown hash"}</strong>
-                  <small>{payment.failed_error || `fee ${payment.fee ?? "unknown"}`}</small>
+                  <small>{payment.failed_error ? paymentFailureStatus(payment.failed_error) : `fee ${payment.fee ?? "unknown"}`}</small>
                 </button>
               ))
             ) : (
@@ -497,6 +504,11 @@ function stringField(value: unknown, key: string): string {
 
 function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function paymentFailureStatus(error: unknown): string {
+  const failure = classifyPaymentFailure(error);
+  return failure.kind === "payment_failed" ? `Payment failed: ${failure.message}` : failure.message;
 }
 
 function parseJsonArray(input: string): unknown[] {

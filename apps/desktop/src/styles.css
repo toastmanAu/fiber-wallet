@@ -1,0 +1,252 @@
+:root {
+  color: #eff7f3;
+  background: #090b0c;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(0, 224, 168, 0.08), transparent 34%),
+    linear-gradient(225deg, rgba(241, 64, 255, 0.08), transparent 32%),
+    #090b0c;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  border-right: 1px solid rgba(134, 255, 223, 0.16);
+  background: rgba(9, 14, 15, 0.92);
+  padding: 20px 14px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 10px 20px;
+}
+
+.brand strong,
+.brand span {
+  display: block;
+}
+
+.brand span {
+  color: #89a39b;
+  font-size: 12px;
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 6px;
+}
+
+.nav-item,
+.profile-row,
+.icon-button {
+  border: 1px solid transparent;
+  color: #dcece7;
+  background: transparent;
+  cursor: pointer;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  border-color: rgba(0, 224, 168, 0.3);
+  background: rgba(0, 224, 168, 0.08);
+}
+
+.workspace {
+  min-width: 0;
+  padding: 28px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 16px;
+}
+
+.topbar p,
+.section-heading p,
+.metric-card p {
+  color: #8fa9a1;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 224, 168, 0.28);
+  border-radius: 999px;
+  color: #b7ffed;
+  background: rgba(0, 224, 168, 0.08);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #00e0a8;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.8fr);
+  gap: 18px;
+}
+
+.dashboard-panel,
+.setup-panel {
+  border: 1px solid rgba(142, 175, 166, 0.22);
+  border-radius: 8px;
+  background: rgba(12, 18, 19, 0.82);
+  padding: 18px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  min-height: 142px;
+  border: 1px solid rgba(0, 224, 168, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 8, 9, 0.72);
+  padding: 16px;
+}
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #9eb6af;
+  margin-bottom: 20px;
+}
+
+.metric-card strong {
+  display: block;
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-color: rgba(0, 224, 168, 0.28);
+  border-radius: 8px;
+  background: rgba(0, 224, 168, 0.08);
+}
+
+.profile-list {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: left;
+  background: rgba(5, 8, 9, 0.72);
+}
+
+.profile-row.active,
+.profile-row:hover {
+  border-color: rgba(241, 64, 255, 0.3);
+}
+
+.profile-row strong,
+.profile-row small {
+  display: block;
+}
+
+.profile-row small {
+  color: #8fa9a1;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(134, 255, 223, 0.16);
+  }
+
+  .sidebar nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .content-grid,
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

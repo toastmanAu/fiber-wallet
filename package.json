@@ -1,0 +1,24 @@
+{
+  "name": "fiber-wallet",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Desktop wallet and control panel for Fiber Network Node.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "npm --workspace apps/desktop run tauri:dev",
+    "tauri:dev": "npm --workspace apps/desktop run tauri:dev",
+    "tauri:build": "npm --workspace apps/desktop run tauri:build",
+    "build:web": "npm --workspace apps/desktop run build:web",
+    "lint": "npm --workspace apps/desktop run lint",
+    "test": "npm --workspace apps/desktop run test"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=11"
+  }
+}
+

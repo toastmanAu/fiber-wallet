@@ -9,6 +9,7 @@
     "apps/desktop"
   ],
   "scripts": {
+    "docs:milestone0": "node scripts/generate-milestone-0-docs.mjs",
     "dev": "npm --workspace apps/desktop run tauri:dev",
     "tauri:dev": "npm --workspace apps/desktop run tauri:dev",
     "tauri:build": "npm --workspace apps/desktop run tauri:build",
@@ -21,4 +22,3 @@
     "npm": ">=11"
   }
 }
-

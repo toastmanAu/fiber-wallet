@@ -296,6 +296,31 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
     return structuredClone(payment);
   }
 
+  if (method === "send_payment_with_router") {
+    const input = objectParams(params);
+    const dryRun = input.dry_run === true;
+    const router = Array.isArray(input.router) ? input.router : [];
+    const paymentHash = stringParam(input.payment_hash) ?? `0x${(mockPayments.length + 1).toString(16).padStart(64, "6")}`;
+    const now = Date.now();
+    const payment: MockPayment = {
+      payment_hash: paymentHash,
+      status: router.length ? "Success" : "Failed",
+      created_at: now,
+      last_updated_at: now,
+      failed_error: router.length ? null : "route not found",
+      fee: dryRun ? "1200" : "2400",
+      routers: router,
+      invoice: stringParam(input.invoice),
+      dry_run: dryRun,
+    };
+
+    if (!dryRun) {
+      mockPayments.unshift(payment);
+    }
+
+    return structuredClone(payment);
+  }
+
   if (method === "get_payment") {
     const paymentHash = stringParam(objectParams(params).payment_hash);
     const payment = mockPayments.find((item) => item.payment_hash === paymentHash);
@@ -321,8 +346,21 @@ export async function mockFiberRpc(method: string, params: unknown[] | Record<st
   }
 
   if (method === "build_router") {
+    const input = objectParams(params);
+    const hopsInfo = Array.isArray(input.hops_info) ? input.hops_info : [];
+    const amount = stringParam(input.amount) ?? "100000000";
+
     return {
-      router_hops: [],
+      router_hops: hopsInfo.length
+        ? structuredClone(hopsInfo)
+        : [
+            {
+              pubkey: mockGraphNodes[0].pubkey,
+              amount,
+              fee: "1000",
+              tlc_expiry_delta: stringParam(input.final_tlc_expiry_delta) ?? "86400000",
+            },
+          ],
     };
   }
 

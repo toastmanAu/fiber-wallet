@@ -122,6 +122,40 @@ describe("mockFiberRpc", () => {
     });
   });
 
+  it("tracks mock router build and router payment flow", async () => {
+    const route = await mockFiberRpc("build_router", {
+      amount: "100000000",
+      hops_info: [],
+      final_tlc_expiry_delta: "86400000",
+    });
+    expect(route).toMatchObject({
+      router_hops: [expect.objectContaining({ pubkey: expect.any(String) })],
+    });
+
+    const router = (route as { router_hops: unknown[] }).router_hops;
+    await expect(
+      mockFiberRpc("send_payment_with_router", {
+        payment_hash: `0x${"77".repeat(32)}`,
+        router,
+        dry_run: true,
+      }),
+    ).resolves.toMatchObject({
+      status: "Success",
+      dry_run: true,
+      routers: router,
+    });
+
+    await expect(
+      mockFiberRpc("send_payment_with_router", {
+        payment_hash: `0x${"88".repeat(32)}`,
+        router,
+      }),
+    ).resolves.toMatchObject({
+      status: "Success",
+      routers: router,
+    });
+  });
+
   it("rejects unknown methods", async () => {
     await expect(mockFiberRpc("unknown_method")).rejects.toThrow("not implemented");
   });

@@ -30,6 +30,10 @@ type ListPaymentsResult = {
   last_cursor?: string | null;
 };
 
+type BuildRouterResult = {
+  router_hops?: unknown[];
+};
+
 export function PaymentsPanel() {
   const activeProfile = useProfileStore((state) =>
     state.profiles.find((profile) => profile.id === state.activeProfileId),
@@ -48,6 +52,10 @@ export function PaymentsPanel() {
   const [timeout, setTimeoutValue] = useState("60");
   const [keysend, setKeysend] = useState(false);
   const [allowSelfPayment, setAllowSelfPayment] = useState(false);
+  const [routeAmount, setRouteAmount] = useState("");
+  const [routeHopsInfo, setRouteHopsInfo] = useState("[]");
+  const [finalTlcExpiryDelta, setFinalTlcExpiryDelta] = useState("");
+  const [routerText, setRouterText] = useState("[]");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("");
   const [status, setStatus] = useState("No invoice or payment action yet");
   const [details, setDetails] = useState("");
@@ -121,6 +129,36 @@ export function PaymentsPanel() {
     });
     setDetails(formatJson(result));
     return dryRun ? "Payment preview completed" : "Payment sent";
+  }
+
+  async function buildRouter() {
+    const result = await fiberRpc<BuildRouterResult>("build_router", compactObject({
+      amount: routeAmount || paymentAmount,
+      hops_info: parseJsonArray(routeHopsInfo),
+      final_tlc_expiry_delta: finalTlcExpiryDelta,
+    }), {
+      profile,
+      token: sessionBiscuitToken,
+    });
+    setRouterText(formatJson(result.router_hops ?? []));
+    setDetails(formatJson(result));
+    return "Route built";
+  }
+
+  async function sendPaymentWithRouter(dryRun: boolean) {
+    const router = parseJsonArray(routerText);
+    const result = await fiberRpc<PaymentResult>("send_payment_with_router", compactObject({
+      payment_hash: paymentHash,
+      router,
+      invoice: invoiceText,
+      keysend,
+      dry_run: dryRun,
+    }), {
+      profile,
+      token: sessionBiscuitToken,
+    });
+    setDetails(formatJson(result));
+    return dryRun ? "Router payment preview completed" : "Router payment sent";
   }
 
   return (
@@ -328,6 +366,69 @@ export function PaymentsPanel() {
             </div>
           </div>
 
+          <h2>Manual Route</h2>
+          <div className="settings-form">
+            <div className="settings-row">
+              <label>
+                <span>Route amount shannons</span>
+                <input value={routeAmount} onChange={(event) => setRouteAmount(event.target.value)} placeholder="uses payment amount" />
+              </label>
+              <label>
+                <span>Final TLC expiry delta ms</span>
+                <input value={finalTlcExpiryDelta} onChange={(event) => setFinalTlcExpiryDelta(event.target.value)} placeholder="optional" />
+              </label>
+            </div>
+            <label>
+              <span>Hops info JSON</span>
+              <textarea
+                className="secret-textarea"
+                value={routeHopsInfo}
+                onChange={(event) => setRouteHopsInfo(event.target.value)}
+                rows={4}
+                spellCheck={false}
+              />
+            </label>
+            <label>
+              <span>Router JSON</span>
+              <textarea
+                className="secret-textarea"
+                value={routerText}
+                onChange={(event) => setRouterText(event.target.value)}
+                rows={4}
+                spellCheck={false}
+              />
+            </label>
+            <div className="warning-note">
+              <FileSearch size={16} aria-hidden="true" />
+              <span>Build Route calls Fiber routing directly. Router send uses the router JSON and can be previewed as a dry run.</span>
+            </div>
+            <div className="node-actions">
+              <button className="command-button" disabled={isBusy} type="button" onClick={() => run(buildRouter)}>
+                <FileSearch size={16} aria-hidden="true" />
+                <span>Build Route</span>
+              </button>
+              <button className="command-button" disabled={isBusy} type="button" onClick={() => run(() => sendPaymentWithRouter(true))}>
+                <FileSearch size={16} aria-hidden="true" />
+                <span>Preview Router Send</span>
+              </button>
+              <ConfirmActionButton
+                confirmLabel="Send Router Payment"
+                disabled={isBusy}
+                icon={<SendHorizontal size={16} aria-hidden="true" />}
+                items={[
+                  { label: "Invoice", value: invoiceText ? shorten(invoiceText) : "not set" },
+                  { label: "Payment hash", value: paymentHash ? shorten(paymentHash) : "not set" },
+                  { label: "Router hops", value: `${parseJsonArraySafe(routerText).length} hops` },
+                  { label: "Keysend", value: keysend ? "yes" : "no" },
+                ]}
+                label="Send Router"
+                title="Confirm Router Payment Send"
+                warning="This sends a payment with the supplied router through the active Fiber RPC profile."
+                onConfirm={() => run(() => sendPaymentWithRouter(false), true)}
+              />
+            </div>
+          </div>
+
           <h2>History</h2>
           <div className="settings-form">
             <label>
@@ -396,6 +497,23 @@ function stringField(value: unknown, key: string): string {
 
 function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function parseJsonArray(input: string): unknown[] {
+  const parsed = JSON.parse(input);
+  if (!Array.isArray(parsed)) {
+    throw new Error("Expected a JSON array");
+  }
+
+  return parsed;
+}
+
+function parseJsonArraySafe(input: string): unknown[] {
+  try {
+    return parseJsonArray(input);
+  } catch {
+    return [];
+  }
 }
 
 function shorten(value: string): string {

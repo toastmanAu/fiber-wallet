@@ -5,6 +5,7 @@ import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
+import { useCkbReadiness } from "../../lib/useCkbReadiness";
 
 type ChannelInfo = {
   channel_id?: string;
@@ -27,6 +28,7 @@ export function ChannelsPanel() {
   );
   const sessionBiscuitToken = useProfileStore((state) => state.sessionBiscuitToken);
   const queryClient = useQueryClient();
+  const ckbReadiness = useCkbReadiness(activeProfile);
   const [filterPubkey, setFilterPubkey] = useState("");
   const [includeClosed, setIncludeClosed] = useState(false);
   const [onlyPending, setOnlyPending] = useState(false);
@@ -104,6 +106,8 @@ export function ChannelsPanel() {
   }
 
   const fundingWarning = fundingWarningText(fundingAmount);
+  const fundingGateWarning = ckbReadiness.gate.blocksFundingActions ? ckbReadiness.gate.detail : "";
+  const fundingActionsDisabled = isBusy || ckbReadiness.gate.blocksFundingActions;
 
   return (
     <section className="settings-panel">
@@ -122,6 +126,10 @@ export function ChannelsPanel() {
         <div>
           <h2>Open Channel</h2>
           <div className="settings-form">
+            <div className={ckbReadiness.gate.blocksFundingActions ? "warning-note danger" : "warning-note"}>
+              <ShieldAlert size={16} aria-hidden="true" />
+              <span>{ckbReadiness.gate.detail}</span>
+            </div>
             <label>
               <span>Peer pubkey</span>
               <input value={openPubkey} onChange={(event) => setOpenPubkey(event.target.value)} placeholder="02..." />
@@ -149,7 +157,7 @@ export function ChannelsPanel() {
             </div>
             <ConfirmActionButton
               confirmLabel="Open Channel"
-              disabled={isBusy}
+              disabled={fundingActionsDisabled}
               icon={<Cable size={16} aria-hidden="true" />}
               items={[
                 { label: "Peer pubkey", value: openPubkey },
@@ -159,7 +167,7 @@ export function ChannelsPanel() {
               ]}
               label="Open Channel"
               title="Confirm Channel Open"
-              warning="Opening a channel commits funding through the active Fiber RPC profile."
+              warning={fundingGateWarning || "Opening a channel commits funding through the active Fiber RPC profile."}
               onConfirm={() =>
                 run(async () => {
                   await fiberRpc(
@@ -205,7 +213,7 @@ export function ChannelsPanel() {
             </div>
             <ConfirmActionButton
               confirmLabel="Accept Channel"
-              disabled={isBusy}
+              disabled={fundingActionsDisabled}
               icon={<Cable size={16} aria-hidden="true" />}
               items={[
                 { label: "Temporary ID", value: acceptTemporaryChannelId },
@@ -213,7 +221,7 @@ export function ChannelsPanel() {
               ]}
               label="Accept Channel"
               title="Confirm Channel Accept"
-              warning="Accepting a channel commits funding through the active Fiber RPC profile."
+              warning={fundingGateWarning || "Accepting a channel commits funding through the active Fiber RPC profile."}
               onConfirm={() =>
                 run(async () => {
                   const result = await fiberRpc<{ channel_id?: string }>(
@@ -329,7 +337,7 @@ export function ChannelsPanel() {
             </label>
             <ConfirmActionButton
               confirmLabel="Shutdown"
-              disabled={isBusy || shutdownConfirm !== "shutdown"}
+              disabled={fundingActionsDisabled || shutdownConfirm !== "shutdown"}
               icon={<XCircle size={16} aria-hidden="true" />}
               items={[
                 { label: "Channel ID", value: shutdownChannelId },
@@ -337,7 +345,7 @@ export function ChannelsPanel() {
               ]}
               label="Shutdown"
               title="Confirm Channel Shutdown"
-              warning="Shutdown changes channel state through the active Fiber RPC profile."
+              warning={fundingGateWarning || "Shutdown changes channel state through the active Fiber RPC profile."}
               onConfirm={() =>
                 run(async () => {
                   await fiberRpc(

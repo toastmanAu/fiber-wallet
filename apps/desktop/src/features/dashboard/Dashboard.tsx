@@ -1,9 +1,15 @@
-import { Activity, Cable, RadioTower, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { Activity, Cable, Gauge, GitCompare, RadioTower, ShieldAlert, ShieldCheck, WalletCards } from "lucide-react";
 import { MetricCard } from "../../components/MetricCard";
+import {
+  classifyCkbFeeReadiness,
+  classifyCkbIndexerReadiness,
+  classifyCkbVersionReadiness,
+} from "../../lib/ckbHealth";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
+import { useCkbReadiness } from "../../lib/useCkbReadiness";
 
 export function Dashboard() {
   const activeProfile = useProfileStore((state) =>
@@ -24,12 +30,16 @@ export function Dashboard() {
     },
     enabled: Boolean(activeProfile),
   });
+  const ckbReadiness = useCkbReadiness(activeProfile);
 
   const nodeName = getStringField(nodeInfo.data, "node_name", "offline");
   const pubkey = getStringField(nodeInfo.data, "pubkey", getStringField(nodeInfo.data, "node_id", "unknown"));
   const network = getStringField(nodeInfo.data, "chain", getStringField(nodeInfo.data, "chain_hash", "unknown"));
   const rpcMode = activeProfile?.rpcMode ?? "mock";
   const statusText = nodeInfo.isError ? formatRpcError(nodeInfo.error) : `${rpcMode} RPC`;
+  const walletReadiness = getWalletReadiness(ckbReadiness);
+  const feeReadiness = getFeeReadiness(ckbReadiness);
+  const versionReadiness = getVersionReadiness(ckbReadiness);
 
   return (
     <div className="dashboard-panel">
@@ -50,6 +60,14 @@ export function Dashboard() {
       <div className="metrics-grid">
         <MetricCard title="Node" value={nodeName} detail={`Network: ${network}`} icon={Activity} />
         <MetricCard
+          title="Wallet"
+          value={walletReadiness.value}
+          detail={walletReadiness.detail}
+          icon={WalletCards}
+        />
+        <MetricCard title="Fees" value={feeReadiness.value} detail={feeReadiness.detail} icon={Gauge} />
+        <MetricCard title="CKB Version" value={versionReadiness.value} detail={versionReadiness.detail} icon={GitCompare} />
+        <MetricCard
           title="Auth"
           value={sessionBiscuitToken ? "session token" : "none"}
           detail="Token is not persisted in this slice"
@@ -60,6 +78,54 @@ export function Dashboard() {
       </div>
     </div>
   );
+}
+
+function getWalletReadiness(ckbReadiness: ReturnType<typeof useCkbReadiness>): { value: string; detail: string } {
+  if (!ckbReadiness.health) {
+    return {
+      value: ckbReadiness.gate.label,
+      detail: ckbReadiness.gate.detail,
+    };
+  }
+
+  const readiness = classifyCkbIndexerReadiness(ckbReadiness.health);
+
+  return {
+    value: readiness.blocksWalletQueries ? "balance gated" : "balance ready",
+    detail: readiness.detail,
+  };
+}
+
+function getFeeReadiness(ckbReadiness: ReturnType<typeof useCkbReadiness>): { value: string; detail: string } {
+  if (!ckbReadiness.health) {
+    return {
+      value: ckbReadiness.gate.label,
+      detail: ckbReadiness.gate.detail,
+    };
+  }
+
+  const readiness = classifyCkbFeeReadiness(ckbReadiness.health);
+
+  return {
+    value: readiness.label,
+    detail: readiness.detail,
+  };
+}
+
+function getVersionReadiness(ckbReadiness: ReturnType<typeof useCkbReadiness>): { value: string; detail: string } {
+  if (!ckbReadiness.health) {
+    return {
+      value: ckbReadiness.gate.label,
+      detail: ckbReadiness.gate.detail,
+    };
+  }
+
+  const readiness = classifyCkbVersionReadiness(ckbReadiness.health);
+
+  return {
+    value: readiness.label,
+    detail: readiness.detail,
+  };
 }
 
 function getStringField(value: unknown, field: string, fallback: string): string {

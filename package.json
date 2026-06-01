@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "docs:milestone0": "node scripts/generate-milestone-0-docs.mjs",
+    "smoke:ckb-health": "node scripts/ckb-health-smoke.mjs",
     "dev": "npm --workspace apps/desktop run tauri:dev",
     "tauri:dev": "npm --workspace apps/desktop run tauri:dev",
     "tauri:build": "npm --workspace apps/desktop run tauri:build",

@@ -1,21 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { CheckCircle2, Plus, ServerCog, ShieldAlert } from "lucide-react";
 import { useState } from "react";
+import {
+  classifyCkbFeeReadiness,
+  classifyCkbIndexerReadiness,
+  classifyCkbVersionReadiness,
+  type CkbRpcHealth,
+  formatIndexerSummary,
+} from "../../lib/ckbHealth";
 import { classifyRpcEndpoint } from "../../lib/endpointSafety";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
-
-type CkbRpcHealth = {
-  status: string;
-  tip_block_number?: unknown;
-  indexer_status: "ok" | "unavailable" | string;
-  indexer_tip_block_number?: unknown;
-  indexer_tip_block_hash?: unknown;
-  indexer_lag_blocks?: number | null;
-  indexer_message?: string | null;
-};
-
-const STALE_INDEXER_LAG_BLOCKS = 16;
 
 export function OnboardingPanel() {
   const profiles = useProfileStore((state) => state.profiles);
@@ -72,20 +67,19 @@ export function OnboardingPanel() {
       });
       const tip = String(response.tip_block_number ?? "unknown");
       const indexerSummary = formatIndexerSummary(response);
-      setCkbHealthStatus(`CKB RPC ${response.status} / tip ${tip} / ${indexerSummary}`);
+      const indexerReadiness = classifyCkbIndexerReadiness(response);
+      const feeReadiness = classifyCkbFeeReadiness(response);
+      const versionReadiness = classifyCkbVersionReadiness(response);
+      setCkbHealthStatus(
+        `CKB RPC ${response.status} / tip ${tip} / ${indexerSummary} / ${feeReadiness.label} / ${versionReadiness.label}`,
+      );
 
-      if (response.indexer_status !== "ok") {
-        setCkbIndexerWarning(
-          response.indexer_message ??
-            "CKB indexer is unavailable on this endpoint. Wallet balance queries and cell lookups will not work until you connect to an endpoint with the indexer module enabled.",
-        );
-      } else if (
-        typeof response.indexer_lag_blocks === "number" &&
-        response.indexer_lag_blocks > STALE_INDEXER_LAG_BLOCKS
-      ) {
-        setCkbIndexerWarning(
-          `Indexer is ${response.indexer_lag_blocks} blocks behind chain tip. Wallet balances may be stale until it catches up.`,
-        );
+      if (indexerReadiness.blocksWalletQueries) {
+        setCkbIndexerWarning(indexerReadiness.detail);
+      } else if (feeReadiness.blocksFunding) {
+        setCkbIndexerWarning(feeReadiness.detail);
+      } else if (versionReadiness.status === "warning") {
+        setCkbIndexerWarning(versionReadiness.detail);
       }
     } catch (error) {
       setCkbHealthStatus(formatRpcError(error));
@@ -236,19 +230,6 @@ export function OnboardingPanel() {
       ) : null}
     </section>
   );
-}
-
-function formatIndexerSummary(health: CkbRpcHealth): string {
-  if (health.indexer_status !== "ok") {
-    return `indexer ${health.indexer_status}`;
-  }
-
-  const tip = String(health.indexer_tip_block_number ?? "unknown");
-  if (typeof health.indexer_lag_blocks === "number") {
-    return `indexer ok / tip ${tip} / lag ${health.indexer_lag_blocks}`;
-  }
-
-  return `indexer ok / tip ${tip}`;
 }
 
 function shorten(value: string): string {

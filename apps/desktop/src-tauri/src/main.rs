@@ -58,6 +58,14 @@ const BISCUIT_TEMPLATE_READ_ONLY: &[&str] = &[
     r#"read("graph");"#,
 ];
 
+const BISCUIT_TEMPLATE_MOBILE_PAIRING: &[&str] = &[
+    r#"read("node");"#,
+    r#"read("peers");"#,
+    r#"read("channels");"#,
+    r#"read("payments");"#,
+    r#"write("invoices");"#,
+];
+
 const BISCUIT_TEMPLATE_OPERATOR: &[&str] = &[
     r#"read("node");"#,
     r#"read("peers");"#,
@@ -72,6 +80,8 @@ const BISCUIT_TEMPLATE_OPERATOR: &[&str] = &[
 ];
 
 const BISCUIT_TEMPLATE_WATCHTOWER: &[&str] = &[r#"write("watchtower");"#];
+const PINNED_CKB_VERSION: &str = "0.206.0";
+const MIN_SUPPORTED_CKB_VERSION: &str = "0.206.0";
 
 #[derive(Serialize)]
 struct SecretBackendStatus {
@@ -114,6 +124,16 @@ struct CkbRpcHealth {
     indexer_tip_block_hash: Option<Value>,
     indexer_lag_blocks: Option<i64>,
     indexer_message: Option<String>,
+    pool_status: String,
+    tx_pool_info: Option<Value>,
+    min_fee_rate: Option<Value>,
+    estimated_fee_rate: Option<Value>,
+    fee_rate_status: String,
+    fee_rate_message: Option<String>,
+    ckb_node_version: Option<String>,
+    pinned_ckb_version: String,
+    version_status: String,
+    version_message: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -221,6 +241,30 @@ struct WalletBip39ImportInput {
     mnemonic: String,
     passphrase: String,
     overwrite: bool,
+}
+
+#[derive(Deserialize)]
+struct BiscuitKeyVaultInput {
+    data_dir: String,
+    private_key: String,
+    passphrase: String,
+}
+
+#[derive(Deserialize)]
+struct BiscuitKeyVaultLoadInput {
+    data_dir: String,
+    passphrase: String,
+}
+
+#[derive(Deserialize)]
+struct BiscuitKeyVaultStatusInput {
+    data_dir: String,
+}
+
+#[derive(Serialize)]
+struct BiscuitKeyVaultStatus {
+    saved: bool,
+    path: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -389,12 +433,13 @@ async fn ckb_rpc_call(
     client: &reqwest::Client,
     endpoint: &Url,
     method: &str,
+    params: Option<Value>,
 ) -> Result<Value, RpcClientError> {
     let body = json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": method,
-        "params": [],
+        "params": params.unwrap_or_else(|| json!([])),
     });
     let response = client
         .post(endpoint.clone())
@@ -449,6 +494,90 @@ fn compute_indexer_lag(chain_tip: &Value, indexer_tip: &Value) -> Option<i64> {
     Some(chain - indexer)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Semver {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+fn ckb_version_status(version: Option<&str>, pinned: &str) -> (&'static str, Option<String>) {
+    let Some(version) = version else {
+        return (
+            "unavailable",
+            Some("CKB Net module local_node_info is unavailable; node version compatibility could not be checked.".to_string()),
+        );
+    };
+
+    let Some((observed, observed_semver)) = extract_semver_prefix(version) else {
+        return (
+            "unknown",
+            Some(format!(
+                "CKB node version did not start with a semantic version: {version}"
+            )),
+        );
+    };
+    let Some((_, pinned_semver)) = extract_semver_prefix(pinned) else {
+        return (
+            "unknown",
+            Some(format!("Pinned CKB version is invalid: {pinned}")),
+        );
+    };
+
+    if observed == pinned {
+        ("ok", None)
+    } else if observed_semver.major != pinned_semver.major || observed_semver < pinned_semver {
+        (
+            "unsupported",
+            Some(format!(
+                "CKB node reports {observed}; minimum supported version is {MIN_SUPPORTED_CKB_VERSION}."
+            )),
+        )
+    } else if observed_semver.minor == pinned_semver.minor {
+        (
+            "compatible",
+            Some(format!(
+                "CKB node reports compatible patch version {observed}; pinned source baseline is {pinned}."
+            )),
+        )
+    } else {
+        (
+            "newer_unverified",
+            Some(format!(
+                "CKB node reports newer unverified version {observed}; pinned source baseline is {pinned}."
+            )),
+        )
+    }
+}
+
+fn extract_semver_prefix(value: &str) -> Option<(&str, Semver)> {
+    let first = value.split_whitespace().next()?;
+    let mut parts = first.split('.');
+    let major = parts.next()?;
+    let minor = parts.next()?;
+    let patch = parts.next()?;
+
+    if parts.next().is_some()
+        || major.is_empty()
+        || minor.is_empty()
+        || patch.is_empty()
+        || !major.chars().all(|ch| ch.is_ascii_digit())
+        || !minor.chars().all(|ch| ch.is_ascii_digit())
+        || !patch.chars().all(|ch| ch.is_ascii_digit())
+    {
+        return None;
+    }
+
+    Some((
+        first,
+        Semver {
+            major: major.parse().ok()?,
+            minor: minor.parse().ok()?,
+            patch: patch.parse().ok()?,
+        },
+    ))
+}
+
 #[tauri::command]
 async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError> {
     let endpoint = validate_endpoint(&endpoint)?;
@@ -461,7 +590,7 @@ async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError
             status: None,
         })?;
 
-    let tip_block_number = ckb_rpc_call(&client, &endpoint, "get_tip_block_number").await?;
+    let tip_block_number = ckb_rpc_call(&client, &endpoint, "get_tip_block_number", None).await?;
 
     let (
         indexer_status,
@@ -469,7 +598,7 @@ async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError
         indexer_tip_block_hash,
         indexer_lag_blocks,
         indexer_message,
-    ) = match ckb_rpc_call(&client, &endpoint, "get_indexer_tip").await {
+    ) = match ckb_rpc_call(&client, &endpoint, "get_indexer_tip", None).await {
         Ok(Value::Object(indexer_tip)) => {
             let number = indexer_tip.get("block_number").cloned();
             let hash = indexer_tip.get("block_hash").cloned();
@@ -503,6 +632,84 @@ async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError
         ),
     };
 
+    let (
+        pool_status,
+        tx_pool_info,
+        min_fee_rate,
+        fee_rate_status,
+        fee_rate_message,
+    ) = match ckb_rpc_call(&client, &endpoint, "tx_pool_info", None).await {
+        Ok(Value::Object(pool_info)) => {
+            let min_fee_rate = pool_info.get("min_fee_rate").cloned();
+            (
+                "ok".to_string(),
+                Some(Value::Object(pool_info)),
+                min_fee_rate,
+                "checking".to_string(),
+                None,
+            )
+        }
+        Ok(other) => (
+            "unavailable".to_string(),
+            Some(other),
+            None,
+            "unavailable".to_string(),
+            Some("CKB Pool module returned an unexpected tx_pool_info response shape".to_string()),
+        ),
+        Err(err) => (
+            "unavailable".to_string(),
+            None,
+            None,
+            "unavailable".to_string(),
+            Some(format!(
+                "CKB Pool module is unavailable ({}): {}. Funding transaction submission and fee checks require Pool RPC.",
+                err.kind, err.message
+            )),
+        ),
+    };
+
+    let (estimated_fee_rate, fee_rate_status, fee_rate_message) =
+        match ckb_rpc_call(&client, &endpoint, "estimate_fee_rate", None).await {
+            Ok(fee_rate) => (Some(fee_rate), "ok".to_string(), fee_rate_message),
+            Err(err) => (
+                None,
+                if fee_rate_status == "unavailable" {
+                    "unavailable".to_string()
+                } else {
+                    "fallback_to_pool_min".to_string()
+                },
+                Some(format!(
+                    "CKB estimate_fee_rate is unavailable ({}): {}. Use tx_pool_info.min_fee_rate as a conservative floor until fee estimation is available.",
+                    err.kind, err.message
+                )),
+            ),
+        };
+
+    let (ckb_node_version, version_status, version_message) =
+        match ckb_rpc_call(&client, &endpoint, "local_node_info", None).await {
+            Ok(Value::Object(node_info)) => {
+                let version = node_info
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string);
+                let (status, message) = ckb_version_status(version.as_deref(), PINNED_CKB_VERSION);
+                (version, status.to_string(), message)
+            }
+            Ok(_) => (
+                None,
+                "unknown".to_string(),
+                Some("CKB local_node_info returned an unexpected response shape".to_string()),
+            ),
+            Err(err) => (
+                None,
+                "unavailable".to_string(),
+                Some(format!(
+                    "CKB Net module local_node_info is unavailable ({}): {}. Node version compatibility could not be checked.",
+                    err.kind, err.message
+                )),
+            ),
+        };
+
     Ok(CkbRpcHealth {
         endpoint: endpoint.to_string(),
         tip_block_number: Some(tip_block_number),
@@ -512,6 +719,16 @@ async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError
         indexer_tip_block_hash,
         indexer_lag_blocks,
         indexer_message,
+        pool_status,
+        tx_pool_info,
+        min_fee_rate,
+        estimated_fee_rate,
+        fee_rate_status,
+        fee_rate_message,
+        ckb_node_version,
+        pinned_ckb_version: PINNED_CKB_VERSION.to_string(),
+        version_status,
+        version_message,
     })
 }
 
@@ -747,7 +964,10 @@ fn node_read_logs(data_dir: String, max_lines: Option<usize>) -> Result<String, 
 }
 
 #[tauri::command]
-fn node_read_config(config_path: String, max_chars: Option<usize>) -> Result<String, NodeCommandError> {
+fn node_read_config(
+    config_path: String,
+    max_chars: Option<usize>,
+) -> Result<String, NodeCommandError> {
     let path = Path::new(&config_path);
     let contents = fs::read_to_string(path).map_err(|err| NodeCommandError {
         kind: "config_read_failed",
@@ -880,7 +1100,9 @@ fn wallet_restore_encrypted_backup(
 }
 
 #[tauri::command]
-fn wallet_import_bip39_mnemonic(input: WalletBip39ImportInput) -> Result<WalletStatus, WalletCommandError> {
+fn wallet_import_bip39_mnemonic(
+    input: WalletBip39ImportInput,
+) -> Result<WalletStatus, WalletCommandError> {
     require_passphrase(&input.passphrase)?;
     let mnemonic = normalize_bip39_mnemonic(&input.mnemonic)?;
     let backup_path = wallet_bip39_backup_path(&input.data_dir);
@@ -888,7 +1110,8 @@ fn wallet_import_bip39_mnemonic(input: WalletBip39ImportInput) -> Result<WalletS
     if backup_path.exists() && !input.overwrite {
         return Err(WalletCommandError {
             kind: "bip39_backup_exists",
-            message: "BIP39 encrypted backup already exists; enable overwrite to replace it".to_string(),
+            message: "BIP39 encrypted backup already exists; enable overwrite to replace it"
+                .to_string(),
         });
     }
 
@@ -930,6 +1153,92 @@ fn wallet_validate_bip39_backup(input: WalletBackupInput) -> Result<bool, Wallet
 }
 
 #[tauri::command]
+fn biscuit_key_vault_status(input: BiscuitKeyVaultStatusInput) -> BiscuitKeyVaultStatus {
+    let path = biscuit_key_vault_path(&input.data_dir);
+
+    BiscuitKeyVaultStatus {
+        saved: path.is_file(),
+        path: path.display().to_string(),
+    }
+}
+
+#[tauri::command]
+fn biscuit_key_vault_save(
+    input: BiscuitKeyVaultInput,
+) -> Result<BiscuitKeyVaultStatus, WalletCommandError> {
+    require_passphrase(&input.passphrase)?;
+    let keypair =
+        biscuit_import_private_key(input.private_key).map_err(|err| WalletCommandError {
+            kind: err.kind,
+            message: err.message,
+        })?;
+    let envelope = encrypt_key_backup(keypair.private_key.as_bytes(), &input.passphrase)?;
+    let path = biscuit_key_vault_path(&input.data_dir);
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| WalletCommandError {
+            kind: "backup_parent_create_failed",
+            message: err.to_string(),
+        })?;
+    }
+
+    fs::write(
+        &path,
+        serde_json::to_string_pretty(&envelope).map_err(|err| WalletCommandError {
+            kind: "backup_serialize_failed",
+            message: err.to_string(),
+        })?,
+    )
+    .map_err(|err| WalletCommandError {
+        kind: "backup_write_failed",
+        message: err.to_string(),
+    })?;
+    set_private_file_permissions(&path)?;
+
+    Ok(BiscuitKeyVaultStatus {
+        saved: true,
+        path: path.display().to_string(),
+    })
+}
+
+#[tauri::command]
+fn biscuit_key_vault_load(
+    input: BiscuitKeyVaultLoadInput,
+) -> Result<BiscuitKeypair, WalletCommandError> {
+    require_passphrase(&input.passphrase)?;
+    let envelope = read_biscuit_key_vault_envelope(&input.data_dir)?;
+    let plaintext = decrypt_key_backup(&envelope, &input.passphrase)?;
+    let private_key = String::from_utf8(plaintext).map_err(|err| WalletCommandError {
+        kind: "biscuit_key_decode_failed",
+        message: err.to_string(),
+    })?;
+
+    biscuit_import_private_key(private_key).map_err(|err| WalletCommandError {
+        kind: err.kind,
+        message: err.message,
+    })
+}
+
+#[tauri::command]
+fn biscuit_key_vault_clear(
+    input: BiscuitKeyVaultStatusInput,
+) -> Result<BiscuitKeyVaultStatus, WalletCommandError> {
+    let path = biscuit_key_vault_path(&input.data_dir);
+
+    if path.exists() {
+        fs::remove_file(&path).map_err(|err| WalletCommandError {
+            kind: "backup_delete_failed",
+            message: err.to_string(),
+        })?;
+    }
+
+    Ok(BiscuitKeyVaultStatus {
+        saved: false,
+        path: path.display().to_string(),
+    })
+}
+
+#[tauri::command]
 fn biscuit_generate_keypair() -> BiscuitKeypair {
     let keypair = KeyPair::new();
 
@@ -961,6 +1270,11 @@ fn biscuit_templates() -> Vec<BiscuitTemplate> {
             id: "operator",
             label: "Operator",
             source: biscuit_template_source("operator", "").unwrap_or_default(),
+        },
+        BiscuitTemplate {
+            id: "mobile_pairing",
+            label: "Mobile pairing",
+            source: biscuit_template_source("mobile_pairing", "").unwrap_or_default(),
         },
         BiscuitTemplate {
             id: "watchtower",
@@ -1304,6 +1618,12 @@ fn wallet_bip39_backup_path(data_dir: &str) -> PathBuf {
         .join("fiber-wallet-bip39-backup.json")
 }
 
+fn biscuit_key_vault_path(data_dir: &str) -> PathBuf {
+    Path::new(data_dir)
+        .join("auth")
+        .join("fiber-wallet-biscuit-key.json")
+}
+
 fn extract_private_key_line(contents: &str) -> Result<String, WalletCommandError> {
     let line = contents
         .lines()
@@ -1465,6 +1785,20 @@ fn read_bip39_backup_envelope(data_dir: &str) -> Result<WalletBackupEnvelope, Wa
     })
 }
 
+fn read_biscuit_key_vault_envelope(
+    data_dir: &str,
+) -> Result<WalletBackupEnvelope, WalletCommandError> {
+    let path = biscuit_key_vault_path(data_dir);
+    let contents = fs::read_to_string(&path).map_err(|err| WalletCommandError {
+        kind: "backup_read_failed",
+        message: err.to_string(),
+    })?;
+
+    serde_json::from_str(&contents).map_err(|err| WalletCommandError {
+        kind: "backup_parse_failed",
+        message: err.to_string(),
+    })
+}
 
 fn hex_encode(bytes: &[u8]) -> String {
     bytes
@@ -1539,6 +1873,7 @@ fn biscuit_template_source(
 ) -> Result<String, BiscuitCommandError> {
     let lines = match template_id {
         "read_only" => BISCUIT_TEMPLATE_READ_ONLY.join("\n"),
+        "mobile_pairing" => BISCUIT_TEMPLATE_MOBILE_PAIRING.join("\n"),
         "operator" => BISCUIT_TEMPLATE_OPERATOR.join("\n"),
         "watchtower" => BISCUIT_TEMPLATE_WATCHTOWER.join("\n"),
         "custom" => {
@@ -1636,6 +1971,10 @@ fn main() {
             wallet_restore_encrypted_backup,
             wallet_import_bip39_mnemonic,
             wallet_validate_bip39_backup,
+            biscuit_key_vault_status,
+            biscuit_key_vault_save,
+            biscuit_key_vault_load,
+            biscuit_key_vault_clear,
             biscuit_generate_keypair,
             biscuit_import_private_key,
             biscuit_templates,
@@ -1732,7 +2071,74 @@ mod tests {
     fn indexer_lag_is_negative_when_indexer_ahead() {
         // Should never happen in practice, but the math should still surface it
         // rather than silently clamp — the UI decides how to present the anomaly.
-        assert_eq!(compute_indexer_lag(&json!("0xf0"), &json!("0x100")), Some(-16));
+        assert_eq!(
+            compute_indexer_lag(&json!("0xf0"), &json!("0x100")),
+            Some(-16)
+        );
+    }
+
+    #[test]
+    fn ckb_version_status_accepts_pinned_version() {
+        assert_eq!(
+            ckb_version_status(Some("0.206.0 (4141cea 2026-05-06)"), PINNED_CKB_VERSION),
+            ("ok", None)
+        );
+    }
+
+    #[test]
+    fn ckb_version_status_flags_mismatches() {
+        let (status, message) =
+            ckb_version_status(Some("0.205.0 (abc123 2026-03-17)"), PINNED_CKB_VERSION);
+
+        assert_eq!(status, "unsupported");
+        assert!(message
+            .unwrap()
+            .contains("minimum supported version is 0.206.0"));
+    }
+
+    #[test]
+    fn ckb_version_status_accepts_compatible_patch_versions() {
+        let (status, message) =
+            ckb_version_status(Some("0.206.2 (abc123 2026-06-01)"), PINNED_CKB_VERSION);
+
+        assert_eq!(status, "compatible");
+        assert!(message
+            .unwrap()
+            .contains("compatible patch version 0.206.2"));
+    }
+
+    #[test]
+    fn ckb_version_status_warns_on_newer_unverified_minor_versions() {
+        let (status, message) =
+            ckb_version_status(Some("0.207.0 (abc123 2026-07-01)"), PINNED_CKB_VERSION);
+
+        assert_eq!(status, "newer_unverified");
+        assert!(message
+            .unwrap()
+            .contains("newer unverified version 0.207.0"));
+    }
+
+    #[test]
+    fn ckb_version_status_blocks_different_major_versions() {
+        let (status, message) =
+            ckb_version_status(Some("1.0.0 (abc123 2027-01-01)"), PINNED_CKB_VERSION);
+
+        assert_eq!(status, "unsupported");
+        assert!(message
+            .unwrap()
+            .contains("minimum supported version is 0.206.0"));
+    }
+
+    #[test]
+    fn ckb_version_status_handles_missing_or_malformed_versions() {
+        assert_eq!(
+            ckb_version_status(None, PINNED_CKB_VERSION).0,
+            "unavailable"
+        );
+        assert_eq!(
+            ckb_version_status(Some("ckb develop"), PINNED_CKB_VERSION).0,
+            "unknown"
+        );
     }
 
     #[test]
@@ -1823,12 +2229,67 @@ mod tests {
     }
 
     #[test]
+    fn biscuit_key_vault_saves_loads_and_clears_encrypted_key() {
+        let data_dir =
+            std::env::temp_dir().join(format!("fiber-wallet-biscuit-vault-test-{}", now_ms()));
+        let keypair = biscuit_generate_keypair();
+        let passphrase = "strong biscuit passphrase";
+
+        let saved = biscuit_key_vault_save(BiscuitKeyVaultInput {
+            data_dir: data_dir.display().to_string(),
+            private_key: keypair.private_key.clone(),
+            passphrase: passphrase.to_string(),
+        })
+        .unwrap();
+
+        assert!(saved.saved);
+        let vault_contents = fs::read_to_string(&saved.path).unwrap();
+        assert!(!vault_contents.contains(&keypair.private_key));
+
+        let loaded = biscuit_key_vault_load(BiscuitKeyVaultLoadInput {
+            data_dir: data_dir.display().to_string(),
+            passphrase: passphrase.to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(loaded.public_key, keypair.public_key);
+        assert_eq!(loaded.private_key, keypair.private_key);
+        assert!(biscuit_key_vault_load(BiscuitKeyVaultLoadInput {
+            data_dir: data_dir.display().to_string(),
+            passphrase: "wrong biscuit passphrase".to_string(),
+        })
+        .is_err());
+
+        let cleared = biscuit_key_vault_clear(BiscuitKeyVaultStatusInput {
+            data_dir: data_dir.display().to_string(),
+        })
+        .unwrap();
+
+        assert!(!cleared.saved);
+        assert!(!Path::new(&cleared.path).exists());
+        let _ = fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
     fn biscuit_operator_source_includes_expiry_and_write_permissions() {
         let source = build_biscuit_source("operator", "", "2026-06-01T00:00:00Z").unwrap();
 
         assert!(source.contains(r#"write("payments");"#));
         assert!(source.contains(r#"read("graph");"#));
         assert!(source.contains("check if time($time), $time <= 2026-06-01T00:00:00Z;"));
+    }
+
+    #[test]
+    fn biscuit_mobile_pairing_source_is_limited() {
+        let source = build_biscuit_source("mobile_pairing", "", "2026-06-01T00:00:00Z").unwrap();
+
+        assert!(source.contains(r#"read("node");"#));
+        assert!(source.contains(r#"read("channels");"#));
+        assert!(source.contains(r#"read("peers");"#));
+        assert!(source.contains(r#"read("payments");"#));
+        assert!(source.contains(r#"write("invoices");"#));
+        assert!(!source.contains(r#"write("channels");"#));
+        assert!(!source.contains(r#"write("payments");"#));
     }
 
     #[test]

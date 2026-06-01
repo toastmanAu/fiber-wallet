@@ -11,6 +11,7 @@ import {
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
 import { queryKeys } from "../../lib/queryKeys";
+import { useCkbReadiness } from "../../lib/useCkbReadiness";
 
 type ExternalFundingResult = {
   channel_id?: string;
@@ -33,6 +34,7 @@ export function ExternalSignerPanel() {
   );
   const sessionBiscuitToken = useProfileStore((state) => state.sessionBiscuitToken);
   const queryClient = useQueryClient();
+  const ckbReadiness = useCkbReadiness(activeProfile);
   const [signerKind, setSignerKind] = useState("ccc");
   const [signerAddress, setSignerAddress] = useState("");
   const [signerLockScript, setSignerLockScript] = useState(defaultScript);
@@ -77,6 +79,8 @@ export function ExternalSignerPanel() {
     unsignedTxText.trim() && signedTxText.trim()
       ? safeCompare(unsignedTxText, signedTxText)
       : null;
+  const fundingGateWarning = ckbReadiness.gate.blocksFundingActions ? ckbReadiness.gate.detail : "";
+  const fundingActionsDisabled = isBusy || ckbReadiness.gate.blocksFundingActions;
 
   return (
     <section className="settings-panel">
@@ -139,6 +143,10 @@ export function ExternalSignerPanel() {
 
           <h2>Open External Funding</h2>
           <div className="settings-form">
+            <div className={ckbReadiness.gate.blocksFundingActions ? "warning-note danger" : "warning-note"}>
+              <ShieldAlert size={16} aria-hidden="true" />
+              <span>{ckbReadiness.gate.detail}</span>
+            </div>
             <label>
               <span>Peer pubkey</span>
               <input value={peerPubkey} onChange={(event) => setPeerPubkey(event.target.value)} placeholder="02..." />
@@ -157,7 +165,7 @@ export function ExternalSignerPanel() {
             </div>
             <ConfirmActionButton
               confirmLabel="Open External"
-              disabled={isBusy}
+              disabled={fundingActionsDisabled}
               icon={<Cable size={16} aria-hidden="true" />}
               items={[
                 { label: "Peer pubkey", value: peerPubkey },
@@ -168,7 +176,7 @@ export function ExternalSignerPanel() {
               ]}
               label="Open External"
               title="Confirm External Funding"
-              warning="This creates an externally funded channel draft through the active Fiber RPC profile."
+              warning={fundingGateWarning || "This creates an externally funded channel draft through the active Fiber RPC profile."}
               onConfirm={() =>
                 run(async () => {
                   const result = await fiberRpc<ExternalFundingResult>(
@@ -279,7 +287,7 @@ export function ExternalSignerPanel() {
               </button>
               <ConfirmActionButton
                 confirmLabel="Submit Signed"
-                disabled={isBusy || !structureReport?.unchanged}
+                disabled={fundingActionsDisabled || !structureReport?.unchanged}
                 icon={<SendHorizontal size={16} aria-hidden="true" />}
                 items={[
                   { label: "Channel ID", value: channelId },
@@ -288,7 +296,7 @@ export function ExternalSignerPanel() {
                 ]}
                 label="Submit Signed"
                 title="Confirm Signed Funding Submit"
-                warning="This submits the signed funding transaction through the active Fiber RPC profile."
+                warning={fundingGateWarning || "This submits the signed funding transaction through the active Fiber RPC profile."}
                 onConfirm={() =>
                   run(async () => {
                     const signed_funding_tx = parseJsonObject(signedTxText);

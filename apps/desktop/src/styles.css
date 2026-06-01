@@ -226,7 +226,7 @@ h2 {
 }
 
 .command-button:disabled {
-  cursor: progress;
+  cursor: not-allowed;
   opacity: 0.65;
 }
 
@@ -654,6 +654,34 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.pairing-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(134, 255, 223, 0.14);
+  padding-top: 18px;
+}
+
+.section-heading.compact {
+  margin-bottom: 0;
+}
+
+.pairing-output {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.pairing-output img {
+  width: 180px;
+  height: 180px;
+  border: 1px solid rgba(134, 255, 223, 0.22);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+}
+
 .console-grid {
   display: grid;
   grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
@@ -730,7 +758,8 @@ h2 {
   .resource-grid,
   .signer-split,
   .settings-row,
-  .health-check-row {
+  .health-check-row,
+  .pairing-output {
     grid-template-columns: 1fr;
   }
 }

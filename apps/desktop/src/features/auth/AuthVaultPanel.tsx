@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Copy, Eye, KeyRound, QrCode, ShieldCheck, WandSparkles } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
+import { assertMobilePairingBiscuit } from "../../lib/biscuitPolicy";
 import { createFiberConnectUri } from "../../lib/fiberConnect";
 import { fiberRpc, formatRpcError } from "../../lib/fiberRpc";
 import { useProfileStore } from "../../lib/profileStore";
@@ -520,6 +521,7 @@ export function AuthVaultPanel() {
               type="button"
               onClick={() =>
                 run(async () => {
+                  setPairingUri("");
                   const signingKey = privateKey.trim()
                     ? privateKey
                     : (await loadSavedBiscuitKey()).private_key;
@@ -531,6 +533,13 @@ export function AuthVaultPanel() {
                       expiry_rfc3339: mobileExpiry,
                     },
                   });
+                  const report = await invoke<BiscuitInspectReport>("biscuit_inspect_token", {
+                    input: {
+                      token: output.token,
+                      public_key: output.public_key,
+                    },
+                  });
+                  assertMobilePairingBiscuit(report, mobileExpiry);
                   const uri = createFiberConnectUri({
                     rpc_url: pairingRpcUrl,
                     auth_token: output.token,

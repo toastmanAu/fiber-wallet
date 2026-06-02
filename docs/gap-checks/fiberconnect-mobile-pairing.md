@@ -27,18 +27,18 @@ No MCP knowledge graph resources were exposed in this session. Gap checking used
 - Added FiberConnect URI creation/parsing helpers with Base64-URL encoding and payload validation.
 - Added Auth Vault "Pair Mobile Wallet" controls for pairing RPC URL, 30-day mobile token expiry, optional TLS certificate fingerprint, QR generation, and link copy.
 - QR generation is local in the app through the `qrcode` package; no token is sent to an external QR service.
+- Added desktop-side Biscuit inspection before QR/link creation. The UI now verifies the generated token against the exact limited mobile-pairing scope and expiry, and clears any stale QR before regeneration.
 - Added tests for FiberConnect URI round-trip, omitted empty fingerprints, invalid URL schemes, and mobile-pairing Biscuit scope.
 
 ## Verification
 
 - `npm run lint` passes.
-- `npm test` passes (58 tests across 12 files).
+- `npm test` passes (61 tests across 13 files).
 - `cargo fmt --check` passes.
-- `cargo test` passes (23 tests, 23 pass).
+- `cargo test` passes (24 tests, 24 pass).
 
 ## Remaining Gaps
 
 - No end-to-end scan was performed against the companion app camera flow.
-- The desktop UI does not yet inspect the generated token to prove exact attenuation before QR display, beyond backend template tests.
 - Certificate fingerprint format is not normalized or verified against a live TLS endpoint yet.
 - The QR payload can be large; very long Biscuit tokens may need QR version/error-correction tuning after real-device scans.

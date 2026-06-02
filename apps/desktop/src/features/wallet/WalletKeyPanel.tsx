@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Download, KeyRound, RotateCcw, ShieldCheck } from "lucide-react";
+import { Download, KeyRound, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { ConfirmActionButton } from "../common/ConfirmActionButton";
+import { useCkbReadiness } from "../../lib/useCkbReadiness";
 import { useProfileStore } from "../../lib/profileStore";
 
 type WalletStatus = {
@@ -18,14 +19,41 @@ type WalletCommandError = {
   message: string;
 };
 
+type CkbLiveCellsResult = {
+  cell_count: number;
+  page_capacity_shannons: string;
+  page_capacity_ckb: string;
+  indexed_capacity_shannons?: string | null;
+  indexed_capacity_ckb?: string | null;
+  indexed_capacity_tip_block_number?: unknown;
+  indexed_capacity_tip_block_hash?: unknown;
+  last_cursor?: string | null;
+  objects: unknown[];
+};
+
+const defaultLockScript = JSON.stringify(
+  {
+    code_hash: "0x",
+    hash_type: "type",
+    args: "0x",
+  },
+  null,
+  2,
+);
+
 export function WalletKeyPanel() {
   const activeProfile = useProfileStore((state) =>
     state.profiles.find((profile) => profile.id === state.activeProfileId),
   );
+  const ckbReadiness = useCkbReadiness(activeProfile);
   const [exportedKeyContents, setExportedKeyContents] = useState("");
   const [bip39Mnemonic, setBip39Mnemonic] = useState("");
   const [backupPassphrase, setBackupPassphrase] = useState("");
   const [overwrite, setOverwrite] = useState(false);
+  const [lockScript, setLockScript] = useState(defaultLockScript);
+  const [cellLimit, setCellLimit] = useState("20");
+  const [afterCursor, setAfterCursor] = useState("");
+  const [liveCells, setLiveCells] = useState<CkbLiveCellsResult | null>(null);
   const [status, setStatus] = useState("No wallet action yet");
   const [details, setDetails] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -252,6 +280,82 @@ export function WalletKeyPanel() {
           />
         </div>
 
+        <div className="pairing-panel">
+          <div className="section-heading compact">
+            <div>
+              <h2>CKB Live Cells</h2>
+              <p>Indexer-backed balance probe for a known lock script.</p>
+            </div>
+          </div>
+
+          <div className={ckbReadiness.gate.blocksBalanceQueries ? "warning-note danger" : "warning-note"}>
+            <strong>{ckbReadiness.gate.label}</strong>
+            <span>{ckbReadiness.gate.detail}</span>
+          </div>
+
+          <label>
+            <span>Lock script JSON</span>
+            <textarea
+              className="secret-textarea"
+              value={lockScript}
+              onChange={(event) => setLockScript(event.target.value)}
+              rows={7}
+              spellCheck={false}
+            />
+          </label>
+
+          <div className="settings-row">
+            <label>
+              <span>Limit</span>
+              <input value={cellLimit} onChange={(event) => setCellLimit(event.target.value)} />
+            </label>
+
+            <label>
+              <span>After cursor</span>
+              <input value={afterCursor} onChange={(event) => setAfterCursor(event.target.value)} placeholder="optional" />
+            </label>
+          </div>
+
+          <div className="node-actions">
+            <button
+              className="command-button"
+              disabled={isBusy || ckbReadiness.gate.blocksBalanceQueries}
+              type="button"
+              onClick={() =>
+                run(async () => {
+                  const result = await invoke<CkbLiveCellsResult>("ckb_live_cells", {
+                    input: {
+                      endpoint: activeProfile.ckbRpcEndpoint,
+                      lock_script: parseLockScript(lockScript),
+                      limit: parseCellLimit(cellLimit),
+                      after_cursor: afterCursor.trim() || null,
+                    },
+                  });
+                  setLiveCells(result);
+                  setAfterCursor(result.last_cursor ?? "");
+                  setDetails(JSON.stringify(result, null, 2));
+                  return `Found ${result.cell_count} live cells / indexed capacity ${result.indexed_capacity_ckb ?? "unknown"} CKB`;
+                })
+              }
+            >
+              <Search size={16} aria-hidden="true" />
+              <span>Query Cells</span>
+            </button>
+          </div>
+
+          {liveCells ? (
+            <div className="resource-card">
+              <div>
+                <strong>{liveCells.indexed_capacity_ckb ?? liveCells.page_capacity_ckb} CKB</strong>
+                <small>
+                  indexed total {liveCells.indexed_capacity_shannons ?? "unknown"} shannons / page{" "}
+                  {liveCells.page_capacity_shannons} shannons / {liveCells.cell_count} cells
+                </small>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
         <div className="node-status">
           <strong>{isBusy ? "Working" : status}</strong>
           {details ? <pre>{details}</pre> : null}
@@ -259,6 +363,24 @@ export function WalletKeyPanel() {
       </div>
     </section>
   );
+}
+
+function parseLockScript(input: string): unknown {
+  try {
+    return JSON.parse(input);
+  } catch (error) {
+    throw new Error(`Lock script JSON is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function parseCellLimit(input: string): number {
+  const parsed = Number.parseInt(input, 10);
+
+  if (!Number.isFinite(parsed)) {
+    return 20;
+  }
+
+  return Math.min(Math.max(parsed, 1), 100);
 }
 
 function formatWalletError(error: unknown): string {

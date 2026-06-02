@@ -136,6 +136,27 @@ struct CkbRpcHealth {
     version_message: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct CkbLiveCellsInput {
+    endpoint: String,
+    lock_script: Value,
+    limit: Option<u64>,
+    after_cursor: Option<String>,
+}
+
+#[derive(Serialize)]
+struct CkbLiveCellsResult {
+    cell_count: usize,
+    page_capacity_shannons: String,
+    page_capacity_ckb: String,
+    indexed_capacity_shannons: Option<String>,
+    indexed_capacity_ckb: Option<String>,
+    indexed_capacity_tip_block_number: Option<Value>,
+    indexed_capacity_tip_block_hash: Option<Value>,
+    last_cursor: Option<String>,
+    objects: Vec<Value>,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum EndpointScope {
     Loopback,
@@ -494,6 +515,106 @@ fn compute_indexer_lag(chain_tip: &Value, indexer_tip: &Value) -> Option<i64> {
     Some(chain - indexer)
 }
 
+fn parse_ckb_capacity(value: &Value) -> Option<u128> {
+    match value {
+        Value::String(hex) => {
+            let trimmed = hex.strip_prefix("0x").unwrap_or(hex);
+            u128::from_str_radix(trimmed, 16).ok()
+        }
+        Value::Number(n) => n.as_u64().map(u128::from),
+        _ => None,
+    }
+}
+
+fn total_live_cell_capacity(objects: &[Value]) -> u128 {
+    objects
+        .iter()
+        .filter_map(|object| object.get("output").or_else(|| object.get("cell_output")))
+        .filter_map(|output| output.get("capacity"))
+        .filter_map(parse_ckb_capacity)
+        .sum()
+}
+
+fn format_ckb_capacity(shannons: u128) -> String {
+    let whole = shannons / 100_000_000;
+    let fractional = shannons % 100_000_000;
+
+    if fractional == 0 {
+        return whole.to_string();
+    }
+
+    let mut fraction = format!("{fractional:08}");
+    while fraction.ends_with('0') {
+        fraction.pop();
+    }
+
+    format!("{whole}.{fraction}")
+}
+
+fn validate_lock_script(script: &Value) -> Result<(), RpcClientError> {
+    let Some(object) = script.as_object() else {
+        return Err(RpcClientError {
+            kind: "invalid_lock_script",
+            message: "Lock script must be a JSON object".to_string(),
+            status: None,
+        });
+    };
+
+    let code_hash = object
+        .get("code_hash")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !is_hex_string(code_hash, Some(32)) {
+        return Err(RpcClientError {
+            kind: "invalid_lock_script",
+            message: "Lock script code_hash must be a 32-byte 0x-prefixed hex string".to_string(),
+            status: None,
+        });
+    }
+
+    let hash_type = object
+        .get("hash_type")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !matches!(hash_type, "data" | "type" | "data1" | "data2") {
+        return Err(RpcClientError {
+            kind: "invalid_lock_script",
+            message: "Lock script hash_type must be data, type, data1, or data2".to_string(),
+            status: None,
+        });
+    }
+
+    let args = object.get("args").and_then(Value::as_str).unwrap_or("");
+    if !is_hex_string(args, None) {
+        return Err(RpcClientError {
+            kind: "invalid_lock_script",
+            message: "Lock script args must be a 0x-prefixed even-length hex string".to_string(),
+            status: None,
+        });
+    }
+
+    Ok(())
+}
+
+fn is_hex_string(value: &str, byte_len: Option<usize>) -> bool {
+    if !value.starts_with("0x") {
+        return false;
+    }
+
+    let hex = &value[2..];
+    if hex.len() % 2 != 0 || hex.is_empty() {
+        return false;
+    }
+
+    if let Some(bytes) = byte_len {
+        if hex.len() != bytes * 2 {
+            return false;
+        }
+    }
+
+    hex.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Semver {
     major: u64,
@@ -729,6 +850,83 @@ async fn ckb_rpc_health(endpoint: String) -> Result<CkbRpcHealth, RpcClientError
         pinned_ckb_version: PINNED_CKB_VERSION.to_string(),
         version_status,
         version_message,
+    })
+}
+
+#[tauri::command]
+async fn ckb_live_cells(input: CkbLiveCellsInput) -> Result<CkbLiveCellsResult, RpcClientError> {
+    let endpoint = validate_endpoint(&input.endpoint)?;
+    validate_lock_script(&input.lock_script)?;
+    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|err| RpcClientError {
+            kind: "client_init",
+            message: err.to_string(),
+            status: None,
+        })?;
+
+    let search_key = json!({
+        "script": input.lock_script,
+        "script_type": "lock",
+        "script_search_mode": "exact",
+        "with_data": false,
+    });
+    let capacity_search_key = search_key.clone();
+    let limit = format!("0x{limit:x}");
+    let params = if let Some(cursor) = input
+        .after_cursor
+        .filter(|cursor| !cursor.trim().is_empty())
+    {
+        json!([search_key, "asc", limit, cursor])
+    } else {
+        json!([search_key, "asc", limit])
+    };
+    let response = ckb_rpc_call(&client, &endpoint, "get_cells", Some(params)).await?;
+    let capacity_response = ckb_rpc_call(
+        &client,
+        &endpoint,
+        "get_cells_capacity",
+        Some(json!([capacity_search_key])),
+    )
+    .await
+    .ok();
+    let objects = response
+        .get("objects")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or_else(|| RpcClientError {
+            kind: "malformed_response",
+            message: "CKB get_cells response did not include an objects array".to_string(),
+            status: None,
+        })?;
+    let page_capacity = total_live_cell_capacity(&objects);
+    let indexed_capacity = capacity_response
+        .as_ref()
+        .and_then(|capacity| capacity.get("capacity"))
+        .and_then(parse_ckb_capacity);
+    let last_cursor = response
+        .get("last_cursor")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+
+    Ok(CkbLiveCellsResult {
+        cell_count: objects.len(),
+        page_capacity_shannons: page_capacity.to_string(),
+        page_capacity_ckb: format_ckb_capacity(page_capacity),
+        indexed_capacity_shannons: indexed_capacity.map(|capacity| capacity.to_string()),
+        indexed_capacity_ckb: indexed_capacity.map(format_ckb_capacity),
+        indexed_capacity_tip_block_number: capacity_response
+            .as_ref()
+            .and_then(|capacity| capacity.get("block_number"))
+            .cloned(),
+        indexed_capacity_tip_block_hash: capacity_response
+            .as_ref()
+            .and_then(|capacity| capacity.get("block_hash"))
+            .cloned(),
+        last_cursor,
+        objects,
     })
 }
 
@@ -1955,6 +2153,7 @@ fn main() {
             rpc_allowed_methods,
             rpc_call,
             ckb_rpc_health,
+            ckb_live_cells,
             mock_rpc_call,
             node_preflight,
             node_generate_config,
@@ -2055,6 +2254,66 @@ mod tests {
         assert_eq!(parse_ckb_block_number(&json!(42)), Some(42));
         assert_eq!(parse_ckb_block_number(&json!(null)), None);
         assert_eq!(parse_ckb_block_number(&json!("not-a-number")), None);
+    }
+
+    #[test]
+    fn ckb_capacity_parses_and_formats_live_cells() {
+        let objects = vec![
+            json!({ "output": { "capacity": "0x2540be400" } }),
+            json!({ "output": { "capacity": "0x5f5e100" } }),
+            json!({ "output": { "capacity": null } }),
+        ];
+
+        let total = total_live_cell_capacity(&objects);
+
+        assert_eq!(total, 10_100_000_000);
+        assert_eq!(format_ckb_capacity(total), "101");
+        assert_eq!(format_ckb_capacity(12_345_678_901), "123.45678901");
+    }
+
+    #[test]
+    fn ckb_lock_script_validation_rejects_bad_shapes() {
+        let valid = json!({
+            "code_hash": format!("0x{}", "a".repeat(64)),
+            "hash_type": "type",
+            "args": "0x1234",
+        });
+
+        assert!(validate_lock_script(&valid).is_ok());
+        assert_eq!(
+            validate_lock_script(&json!("not-object")).unwrap_err().kind,
+            "invalid_lock_script"
+        );
+        assert_eq!(
+            validate_lock_script(&json!({
+                "code_hash": "0x1234",
+                "hash_type": "type",
+                "args": "0x1234"
+            }))
+            .unwrap_err()
+            .kind,
+            "invalid_lock_script"
+        );
+        assert_eq!(
+            validate_lock_script(&json!({
+                "code_hash": format!("0x{}", "a".repeat(64)),
+                "hash_type": "bad",
+                "args": "0x1234"
+            }))
+            .unwrap_err()
+            .kind,
+            "invalid_lock_script"
+        );
+        assert_eq!(
+            validate_lock_script(&json!({
+                "code_hash": format!("0x{}", "a".repeat(64)),
+                "hash_type": "type",
+                "args": "0x123"
+            }))
+            .unwrap_err()
+            .kind,
+            "invalid_lock_script"
+        );
     }
 
     #[test]

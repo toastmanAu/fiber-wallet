@@ -30,6 +30,8 @@ export function buildDiagnosticBundle(input: DiagnosticBundleInput): string {
       data_dir_set: Boolean(input.profile.dataDir),
       config_path_set: Boolean(input.profile.configPath),
       biscuit_public_key_set: Boolean(input.profile.biscuitPublicKey),
+      ckb_lock_label_set: Boolean(input.profile.ckbLockLabel),
+      ckb_lock_script_set: Boolean(input.profile.ckbLockScript),
       peer_address_book_count: input.profile.peerAddressBook.length,
     },
     rpc_status: input.rpcStatus,

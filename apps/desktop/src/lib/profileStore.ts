@@ -31,6 +31,8 @@ export type Profile = {
   p2pListeningAddr: string;
   rpcListeningAddr: string;
   biscuitPublicKey: string;
+  ckbLockLabel: string;
+  ckbLockScript: string;
   peerAddressBook: PeerAddressBookEntry[];
   createdAt: string;
 };
@@ -56,6 +58,8 @@ type ProfileState = {
         | "p2pListeningAddr"
         | "rpcListeningAddr"
         | "biscuitPublicKey"
+        | "ckbLockLabel"
+        | "ckbLockScript"
         | "peerAddressBook"
       >
     >,
@@ -80,6 +84,8 @@ const initialProfile: Profile = {
   p2pListeningAddr: "/ip4/127.0.0.1/tcp/8228",
   rpcListeningAddr: "127.0.0.1:8227",
   biscuitPublicKey: "",
+  ckbLockLabel: "",
+  ckbLockScript: "",
   peerAddressBook: [],
   createdAt: "2026-05-31T00:00:00.000Z",
 };
@@ -98,6 +104,8 @@ function withProfileDefaults(profile: Partial<Profile>): Profile {
     p2pListeningAddr: profile.p2pListeningAddr ?? "/ip4/127.0.0.1/tcp/8228",
     rpcListeningAddr: profile.rpcListeningAddr ?? "127.0.0.1:8227",
     biscuitPublicKey: profile.biscuitPublicKey ?? "",
+    ckbLockLabel: profile.ckbLockLabel ?? "",
+    ckbLockScript: profile.ckbLockScript ?? "",
     peerAddressBook: Array.isArray(profile.peerAddressBook) ? profile.peerAddressBook : [],
   };
 }

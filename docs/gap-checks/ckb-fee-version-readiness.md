@@ -49,6 +49,7 @@ No MCP knowledge graph resources were exposed in this session. Gap checking used
 - External funding open and signed funding submit controls now consume the shared funding-action gate.
 - Added a Wallet-panel CKB live-cell workbench that consumes the shared balance-query gate, accepts a known lock script, calls indexer `get_cells` with exact script search and hex `Uint32` limit, carries the result cursor, and summarizes current-page capacity.
 - Extended the workbench command to call `get_cells_capacity` for total indexed capacity at the indexer tip, so the UI can distinguish returned-page capacity from full lock-script capacity.
+- Added non-secret profile metadata for a saved CKB lock label and lock script so the Wallet live-cell workbench can persist the current balance target per profile.
 - Added backend `ckb_live_cells` with lock-script validation, bounded result limits, CKB capacity parsing, and CKB-denominated capacity formatting.
 - Mock profiles remain usable for offline workflow development while live profiles block funding actions until required CKB probes are ready.
 - Added backend CKB version policy classification for pinned, compatible patch, newer-unverified, unsupported, unknown, and unavailable versions.
@@ -75,4 +76,4 @@ No MCP knowledge graph resources were exposed in this session. Gap checking used
 - The supported-version policy is conservative and source-pinned, but newer minor releases still need explicit verification before changing from warning to compatible.
 - CKB endpoint auth/custom headers remain unmodeled.
 - No live UI exercise was performed against an endpoint where CKB readiness transitions from blocked to ready.
-- Live-cell querying still requires a manually supplied lock script; FNN key-to-lock/address derivation and full wallet balance aggregation remain pending.
+- Live-cell querying can persist a manually supplied lock script, but FNN key-to-lock/address derivation and full wallet balance aggregation remain pending.

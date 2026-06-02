@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Download, KeyRound, RotateCcw, Search, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { Download, KeyRound, RotateCcw, Save, Search, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ConfirmActionButton } from "../common/ConfirmActionButton";
 import { useCkbReadiness } from "../../lib/useCkbReadiness";
 import { useProfileStore } from "../../lib/profileStore";
@@ -45,18 +45,27 @@ export function WalletKeyPanel() {
   const activeProfile = useProfileStore((state) =>
     state.profiles.find((profile) => profile.id === state.activeProfileId),
   );
+  const updateActiveProfile = useProfileStore((state) => state.updateActiveProfile);
   const ckbReadiness = useCkbReadiness(activeProfile);
   const [exportedKeyContents, setExportedKeyContents] = useState("");
   const [bip39Mnemonic, setBip39Mnemonic] = useState("");
   const [backupPassphrase, setBackupPassphrase] = useState("");
   const [overwrite, setOverwrite] = useState(false);
-  const [lockScript, setLockScript] = useState(defaultLockScript);
+  const [lockLabel, setLockLabel] = useState(activeProfile?.ckbLockLabel || "");
+  const [lockScript, setLockScript] = useState(activeProfile?.ckbLockScript || defaultLockScript);
   const [cellLimit, setCellLimit] = useState("20");
   const [afterCursor, setAfterCursor] = useState("");
   const [liveCells, setLiveCells] = useState<CkbLiveCellsResult | null>(null);
   const [status, setStatus] = useState("No wallet action yet");
   const [details, setDetails] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+
+  useEffect(() => {
+    setLockLabel(activeProfile?.ckbLockLabel || "");
+    setLockScript(activeProfile?.ckbLockScript || defaultLockScript);
+    setAfterCursor("");
+    setLiveCells(null);
+  }, [activeProfile?.id, activeProfile?.ckbLockLabel, activeProfile?.ckbLockScript]);
 
   if (!activeProfile) {
     return (
@@ -284,7 +293,7 @@ export function WalletKeyPanel() {
           <div className="section-heading compact">
             <div>
               <h2>CKB Live Cells</h2>
-              <p>Indexer-backed balance probe for a known lock script.</p>
+              <p>{lockLabel.trim() ? lockLabel : "Indexer-backed balance probe for a known lock script."}</p>
             </div>
           </div>
 
@@ -292,6 +301,11 @@ export function WalletKeyPanel() {
             <strong>{ckbReadiness.gate.label}</strong>
             <span>{ckbReadiness.gate.detail}</span>
           </div>
+
+          <label>
+            <span>Lock label</span>
+            <input value={lockLabel} onChange={(event) => setLockLabel(event.target.value)} placeholder="FNN funding lock" />
+          </label>
 
           <label>
             <span>Lock script JSON</span>
@@ -317,6 +331,25 @@ export function WalletKeyPanel() {
           </div>
 
           <div className="node-actions">
+            <button
+              className="command-button"
+              disabled={isBusy}
+              type="button"
+              onClick={() =>
+                run(async () => {
+                  parseLockScript(lockScript);
+                  updateActiveProfile({
+                    ckbLockLabel: lockLabel.trim(),
+                    ckbLockScript: lockScript.trim(),
+                  });
+                  return "Saved CKB lock metadata to active profile";
+                })
+              }
+            >
+              <Save size={16} aria-hidden="true" />
+              <span>Save Lock</span>
+            </button>
+
             <button
               className="command-button"
               disabled={isBusy || ckbReadiness.gate.blocksBalanceQueries}

@@ -2,11 +2,11 @@
 
 Desktop control panel and wallet for Fiber Network Node.
 
-This repository is starting with Milestone 1 from `docs/project-plan.md`: a Tauri 2 + React + TypeScript desktop skeleton with profile state, mock RPC fixtures, and baseline tests.
+This repository is building the desktop Fiber Wallet described in `docs/project-plan.md`: a Tauri 2 + React + TypeScript control panel for Fiber RPC profiles, CKB readiness, Biscuit auth, peers/channels, payments, wallet key handling, and diagnostics.
 
 ## Status
 
-Phase 1 is complete. See `docs/phase-1-writeup.md` for the implementation summary, validation notes, and next milestone gates.
+Phase 1 is complete and the app has moved through several source-backed vertical slices beyond the initial skeleton. See `docs/current-status.md` for the latest checkpoint and `docs/phase-1-writeup.md` for the historical scaffold summary.
 
 Milestone 0 source pinning has started. Generated source-backed docs live in:
 
@@ -30,6 +30,14 @@ npm run dev
 ```
 
 Useful checks:
+
+```bash
+npm run lint
+npm test
+npm run build:web
+```
+
+The current checkpoint has these checks passing:
 
 ```bash
 npm run lint

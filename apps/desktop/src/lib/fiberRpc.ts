@@ -39,6 +39,14 @@ export async function fiberRpc<T>(method: string, params: FiberRpcParams = [], o
 
 export function formatRpcError(error: unknown): string {
   if (isRpcClientError(error)) {
+    if (error.kind === "auth_required") {
+      return `Biscuit auth required or invalid: ${error.message}`;
+    }
+
+    if (error.kind === "permission_denied") {
+      return `Biscuit token permission denied: ${error.message}`;
+    }
+
     return `${error.kind}: ${error.message}`;
   }
 

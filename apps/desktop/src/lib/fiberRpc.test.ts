@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fiberRpc } from "./fiberRpc";
+import { fiberRpc, formatRpcError } from "./fiberRpc";
 import type { Profile } from "./profileStore";
 
 const mockProfile: Profile = {
@@ -44,5 +44,25 @@ describe("fiberRpc", () => {
     ).rejects.toMatchObject({
       kind: "public_rpc_requires_auth",
     });
+  });
+
+  it("formats auth failures with Biscuit remediation context", () => {
+    expect(
+      formatRpcError({
+        kind: "auth_required",
+        message: "Fiber RPC error -32999: Unauthorized",
+        status: 200,
+      }),
+    ).toBe("Biscuit auth required or invalid: Fiber RPC error -32999: Unauthorized");
+  });
+
+  it("formats permission failures with Biscuit scope context", () => {
+    expect(
+      formatRpcError({
+        kind: "permission_denied",
+        message: "Fiber RPC error -32999: Permission denied for method",
+        status: 200,
+      }),
+    ).toBe("Biscuit token permission denied: Fiber RPC error -32999: Permission denied for method");
   });
 });

@@ -436,11 +436,7 @@ async fn rpc_call(
         })?;
 
     if let Some(error) = rpc_response.error {
-        return Err(RpcClientError {
-            kind: "json_rpc_error",
-            message: format!("Fiber RPC error {}: {}", error.code, error.message),
-            status: Some(status.as_u16()),
-        });
+        return Err(map_json_rpc_error("Fiber RPC", error, status));
     }
 
     rpc_response.result.ok_or_else(|| RpcClientError {
@@ -484,11 +480,7 @@ async fn ckb_rpc_call(
         })?;
 
     if let Some(error) = rpc_response.error {
-        return Err(RpcClientError {
-            kind: "json_rpc_error",
-            message: format!("CKB RPC error {}: {}", error.code, error.message),
-            status: Some(status.as_u16()),
-        });
+        return Err(map_json_rpc_error("CKB RPC", error, status));
     }
 
     rpc_response.result.ok_or_else(|| RpcClientError {
@@ -1656,6 +1648,32 @@ fn map_http_status(status: StatusCode) -> RpcClientError {
     }
 }
 
+fn map_json_rpc_error(
+    service: &'static str,
+    error: JsonRpcErrorBody,
+    status: StatusCode,
+) -> RpcClientError {
+    let lower_message = error.message.to_ascii_lowercase();
+    let kind = if lower_message.contains("unauthorized")
+        || lower_message.contains("unauthenticated")
+        || lower_message.contains("authentication")
+        || lower_message.contains("missing token")
+        || lower_message.contains("invalid token")
+    {
+        "auth_required"
+    } else if lower_message.contains("permission denied") || lower_message.contains("forbidden") {
+        "permission_denied"
+    } else {
+        "json_rpc_error"
+    };
+
+    RpcClientError {
+        kind,
+        message: format!("{service} error {}: {}", error.code, error.message),
+        status: Some(status.as_u16()),
+    }
+}
+
 fn build_node_preflight(input: NodePreflightInput) -> NodePreflightReport {
     let mut blockers = Vec::new();
     let mut warnings = Vec::new();
@@ -2398,6 +2416,37 @@ mod tests {
             ckb_version_status(Some("ckb develop"), PINNED_CKB_VERSION).0,
             "unknown"
         );
+    }
+
+    #[test]
+    fn json_rpc_unauthorized_maps_to_auth_required() {
+        let error = map_json_rpc_error(
+            "Fiber RPC",
+            JsonRpcErrorBody {
+                code: -32999,
+                message: "Unauthorized".to_string(),
+            },
+            StatusCode::OK,
+        );
+
+        assert_eq!(error.kind, "auth_required");
+        assert_eq!(error.status, Some(200));
+        assert!(error.message.contains("Fiber RPC error -32999"));
+    }
+
+    #[test]
+    fn json_rpc_permission_errors_map_to_permission_denied() {
+        let error = map_json_rpc_error(
+            "Fiber RPC",
+            JsonRpcErrorBody {
+                code: -32999,
+                message: "Permission denied for method".to_string(),
+            },
+            StatusCode::OK,
+        );
+
+        assert_eq!(error.kind, "permission_denied");
+        assert_eq!(error.status, Some(200));
     }
 
     #[test]

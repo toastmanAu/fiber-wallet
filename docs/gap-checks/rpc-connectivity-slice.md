@@ -16,6 +16,7 @@ No knowledge graph tools, MCP resources, or local graph files were exposed in th
 - Added optional `Authorization: Bearer <token>` support.
 - Added HTTP and JSON-RPC error mapping.
 - Refined JSON-RPC auth and permission error mapping so HTTP 200 responses with Fiber auth failures are surfaced as `auth_required` or `permission_denied`.
+- Added `npm run smoke:fiber-rpc` for local/live Fiber `node_info` probes; unauthenticated protected endpoints are reported as `auth_required` and accepted when no token is supplied.
 - Kept mock RPC fixtures for web/test development.
 - Added frontend profile-level RPC mode:
   - `mock`
@@ -35,5 +36,5 @@ No knowledge graph tools, MCP resources, or local graph files were exposed in th
 - Token storage still needs OS keychain/Stronghold.
 - RPC params are allowlisted by method name but not schema-validated yet.
 - Error mapping still needs broader live FNN fixtures for route, payment, channel, and malformed-param failures.
-- No live FNN smoke test is committed yet because no local/bundled `fnn` binary is available.
+- Live FNN smoke coverage currently probes `node_info` only; broader channel, invoice, payment, and graph probes remain pending.
 - Public/non-loopback endpoint warnings are not surfaced in UI yet.

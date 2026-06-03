@@ -35,6 +35,7 @@ Useful checks:
 npm run lint
 npm test
 npm run build:web
+npm run smoke:fiber-rpc -- http://127.0.0.1:8231
 ```
 
 The current checkpoint has these checks passing:

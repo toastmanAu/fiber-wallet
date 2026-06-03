@@ -17,12 +17,14 @@ The current checkpoint passes:
 npm run lint
 npm test
 npm run build:web
+npm run smoke:fiber-rpc -- http://127.0.0.1:8231
 ```
 
 Observed test count on 2026-06-03:
 
 - 13 Vitest files passed
-- 61 tests passed
+- 63 tests passed
+- Local Fiber smoke status: `auth_required` for unauthenticated `node_info` at `http://127.0.0.1:8231`
 
 ## Implemented Slices
 
